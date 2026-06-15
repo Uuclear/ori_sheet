@@ -1,64 +1,26 @@
-data/
-.firecrawl/
-__pycache__/
-*.pyc
-.pytest_cache/
-tests/output_test_report.docx
-.env
-*.db
-
-# 本地探测/临时输出
-probe_*.txt
-probe_*.json
-probe_*.py
-*_out.txt
-template_*.txt
-order_fields.txt
-param_field.json
-get_report.json
-detail_page.html
-experiment_page.html
-exp_pj.html
-nstd_report.html
-test_report_page.html
-tmp_*.docx
-~$*
-*.xlsx
-exp_*.txt
-probe2.txt
-xlsx_strings.txt
-*.wps
-*.doc
-
-# .NET / C# (RingKnifeDetector)
+# 构建与发布产物
 [Bb]in/
 [Oo]bj/
 [Dd]ebug/
 [Rr]elease/
-x64/
-x86/
-[Aa]rm/
-[Aa]rm64/
-bld/
-[Bb]uild/
-[Ll]og/
-[Ll]ogs/
+dist/
+publish/
 .vs/
 *.user
-*.userosscache
 *.suo
 *.cache
 *.dll
 *.exe
 *.pdb
 *.nupkg
-project.lock.json
-project.fragment.lock.json
-artifacts/
-*.DotSettings.user
 *_wpftmp.*
 *.runtimeconfig.json
 *.deps.json
 
 # 用户本地配置（含 LIMIS 密码）
 **/settings.json
+
+# 临时文件
+~$*
+tmp_*.docx
+*.xlsx

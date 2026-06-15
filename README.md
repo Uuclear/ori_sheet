@@ -1,84 +1,69 @@
-# 环刀法压实度检测 - 原始记录填写与报告生成
+# 环刀法压实度检测工具
 
-环刀法压实度检测工具，支持从 LIMIS 拉取工程信息、录入原始记录、自动计算并生成检测报告。
+Windows 桌面应用（C# WPF）：环刀法原始记录填写、自动计算、LIMIS 工程信息拉取、Excel / Word 报告导出。
 
-本项目包含两个实现：
+## 快速开始（已编译版本）
 
-| 目录 | 说明 |
-|------|------|
-| `ring_knife/` | Python + FastAPI 本地 Web 版 |
-| [`RingKnifeDetector/`](RingKnifeDetector/) | **C# WPF 桌面版**（推荐日常使用） |
+1. 从 [Releases](https://github.com/Uuclear/ori_sheet/releases) 下载 `RingKnifeDetector-v1.0.0-win-x64.zip`
+2. 解压到任意目录
+3. 双击 `RingKnifeDetector.exe` 运行（已自带 .NET 运行时，无需单独安装）
+4. 详细步骤见压缩包内 **使用说明.txt**
 
----
+## 从源码编译
 
-## C# 桌面版（RingKnifeDetector）
+**环境**：Windows 10/11 + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 
-详见 [RingKnifeDetector/README.md](RingKnifeDetector/README.md)。
-
-```bash
+```powershell
 cd RingKnifeDetector
-dotnet build
+dotnet build -c Release
 dotnet run --project RingKnifeDetector/RingKnifeDetector.csproj
 ```
 
----
+**一键发布**（生成 `dist/` 目录与 zip 包）：
 
-## Python Web 版
-
-基于 FastAPI 的本地 Web 工具：表格录入环刀法原始记录、自动计算干密度/压实系数，从 LIMIS 拉取工程信息，生成 `环刀300.docx` 格式检测报告。
-
-## 环境要求
-
-- Python 3.10+
-- 模板文件位于项目根目录：`环刀（2个1组）.docx`、`环刀300.docx`
-
-## 安装
-
-```bash
-cd d:\github\jsscript
-pip install -r requirements.txt
-copy .env.example .env
+```powershell
+.\build.ps1
 ```
 
-编辑 `.env` 填写 LIMIS 内网账号（可选，不填则工程信息手工录入）：
+产物路径：`dist/RingKnifeDetector-v1.0.0-win-x64/`
 
-```
-LIMIS_BASE_URL=http://10.1.228.22
-LIMIS_USERNAME=你的用户名
-LIMIS_PASSWORD=你的密码
-```
+## 使用流程
 
-## 启动
-
-```bash
-uvicorn ring_knife.main:app --reload --port 8765
-```
-
-浏览器打开：http://127.0.0.1:8765
-
-## 页面导航
-
-| 路径 | 说明 |
+| 步骤 | 操作 |
 |------|------|
-| `/` | 任务导航 — 按委托单编号模糊查询任务，点击进入原始记录 |
-| `/record` | 原始记录填写与报告生成 |
-| `/settings` | LIMIS 账号密码设置 |
+| 1. 设置 | 填写 LIMIS 服务器地址（默认 `http://10.1.228.22`）、账号密码 → **测试登录** → 确认主检姓名 |
+| 2. 任务 | 在任务列表搜索委托编号，**双击**任务进入记录页 |
+| 3. 录入 | 填写原始记录 → 点击 **计算** → **保存草稿** |
+| 4. 导出 | **导出 Excel**（原始记录）或 **导出 Word**（检测报告） |
 
-## 功能
+## 功能说明
 
-1. **设置页** — 在页面手动配置 LIMIS 服务器地址、用户名、密码，支持测试登录
-2. **任务导航** — 输入委托单编号关键词（模糊匹配），查询任务列表，点击「填写记录」跳转并自动拉取工程信息
-3. **工程信息** — 输入委托编号，点击「从 LIMIS 拉取」自动填充；也可全部手工填写
-2. **检测参数** — 最大干密度、设计要求、检验标准等
-3. **原始记录表格** — 每行 1 测点 + 2 铝盒，点击「计算」自动算湿密度、含水率、干密度、压实系数
-4. **生成报告** — 填充 `环刀300.docx` 模板并下载 Word 文件
+- **LIMIS 集成**：拉取工程信息、样品编号、主检姓名（`GetUserName` API）
+- **原始记录表**：支持多测点、右键删除、Tab 键按列优先跳转可编辑格
+- **自动计算**：湿密度、含水率、干密度、压实系数/压实度
+- **Word 报告**：基于 `Resources/report_template.docx` 模板生成
+- **草稿**：自动保存至 `%LocalAppData%/RingKnifeDetector/Drafts/`
+- **设置**：保存至 `%LocalAppData%/RingKnifeDetector/settings.json`（勿分享此文件）
 
-## API
+## 项目结构
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/` | Web 界面 |
-| POST | `/api/calc` | 计算 |
-| POST | `/api/limis/login` | LIMIS 登录 |
-| GET | `/api/limis/entrust/{no}` | 按委托编号查询工程信息 |
-| POST | `/api/report/generate` | 生成并下载 docx 报告 |
+```
+├── RingKnifeDetector/          # 解决方案与源码
+│   ├── RingKnifeDetector/      # WPF 主程序
+│   └── RingKnifeDetector.Tests/
+├── docs/                       # LIMIS API 参考文档
+├── build.ps1                   # 发布脚本
+├── USER_GUIDE.md               # 用户手册（Release 包内为 使用说明.txt）
+└── dist/                       # 本地编译输出（git 忽略）
+```
+
+## 测试
+
+```powershell
+cd RingKnifeDetector
+dotnet test
+```
+
+## 版本
+
+当前版本：**v1.0.0**
