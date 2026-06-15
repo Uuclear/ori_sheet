@@ -1,5 +1,30 @@
 # 环刀法压实度检测 - 原始记录填写与报告生成
 
+环刀法压实度检测工具，支持从 LIMIS 拉取工程信息、录入原始记录、自动计算并生成检测报告。
+
+本项目包含两个实现：
+
+| 目录 | 说明 |
+|------|------|
+| `ring_knife/` | Python + FastAPI 本地 Web 版 |
+| [`RingKnifeDetector/`](RingKnifeDetector/) | **C# WPF 桌面版**（推荐日常使用） |
+
+---
+
+## C# 桌面版（RingKnifeDetector）
+
+详见 [RingKnifeDetector/README.md](RingKnifeDetector/README.md)。
+
+```bash
+cd RingKnifeDetector
+dotnet build
+dotnet run --project RingKnifeDetector/RingKnifeDetector.csproj
+```
+
+---
+
+## Python Web 版
+
 基于 FastAPI 的本地 Web 工具：表格录入环刀法原始记录、自动计算干密度/压实系数，从 LIMIS 拉取工程信息，生成 `环刀300.docx` 格式检测报告。
 
 ## 环境要求
