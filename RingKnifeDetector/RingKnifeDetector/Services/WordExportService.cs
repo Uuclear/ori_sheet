@@ -1,9 +1,9 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using RingKnifeDetector.Helpers;
 using RingKnifeDetector.Models;
 
 namespace RingKnifeDetector.Services
@@ -20,7 +20,7 @@ namespace RingKnifeDetector.Services
             @"[\u2e80-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3000-\u303f\uff00-\uffef]",
             RegexOptions.Compiled);
 
-        public void ExportToWord(
+        public string ExportToWord(
             ProjectInfo project,
             RecordParams p,
             List<SamplePointResult> results,
@@ -62,7 +62,15 @@ namespace RingKnifeDetector.Services
                     StyleDocument(body);
                 }
 
-                CommitReportFile(workPath, filePath);
+                return CommitReportFile(workPath, filePath);
+            }
+            catch (IOException ex)
+            {
+                if (File.Exists(workPath))
+                {
+                    try { File.Delete(workPath); } catch { /* ignore */ }
+                }
+                throw new IOException(TranslateIoMessage(ex, filePath), ex);
             }
             catch
             {
@@ -74,40 +82,67 @@ namespace RingKnifeDetector.Services
             }
         }
 
-        private static void CommitReportFile(string sourcePath, string destinationPath)
+        private static string TranslateIoMessage(IOException ex, string destinationPath)
+        {
+            if (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("正在由另一进程使用", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"无法写入报告文件，请关闭正在打开的 Word 文档后重试：{destinationPath}";
+            }
+            return ex.Message;
+        }
+
+        private static string CommitReportFile(string sourcePath, string destinationPath)
+        {
+            IOException? lastError = null;
+            foreach (var targetPath in EnumerateSaveCandidates(destinationPath))
+            {
+                try
+                {
+                    WriteReportToPath(sourcePath, targetPath);
+                    if (!string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { File.Delete(sourcePath); } catch { /* ignore */ }
+                    }
+                    return targetPath;
+                }
+                catch (IOException ex)
+                {
+                    lastError = ex;
+                }
+            }
+
+            throw new IOException(
+                TranslateIoMessage(lastError ?? new IOException("无法写入报告文件"), destinationPath),
+                lastError);
+        }
+
+        private static void WriteReportToPath(string sourcePath, string destinationPath)
         {
             var dir = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            for (var attempt = 0; attempt < 3; attempt++)
+            if (File.Exists(destinationPath))
             {
-                try
-                {
-                    if (File.Exists(destinationPath))
-                    {
-                        File.SetAttributes(destinationPath, FileAttributes.Normal);
-                        File.Delete(destinationPath);
-                    }
-                    File.Move(sourcePath, destinationPath);
-                    return;
-                }
-                catch (IOException) when (attempt < 2)
-                {
-                    Thread.Sleep(250);
-                }
+                File.SetAttributes(destinationPath, FileAttributes.Normal);
+                File.Delete(destinationPath);
             }
 
-            try
-            {
-                File.Copy(sourcePath, destinationPath, true);
-                File.Delete(sourcePath);
-            }
-            catch (IOException ex)
-            {
-                throw new IOException(
-                    $"无法写入报告文件，请关闭正在打开的 Word 文档后重试：{destinationPath}", ex);
-            }
+            File.Copy(sourcePath, destinationPath, true);
+        }
+
+        private static IEnumerable<string> EnumerateSaveCandidates(string destinationPath)
+        {
+            yield return destinationPath;
+
+            var dir = Path.GetDirectoryName(destinationPath) ?? ".";
+            var ext = Path.GetExtension(destinationPath);
+            var name = Path.GetFileNameWithoutExtension(destinationPath);
+            var baseName = Regex.Replace(name, @"\(\d+\)$", string.Empty);
+
+            for (var i = 2; i <= 99; i++)
+                yield return Path.Combine(dir, $"{baseName}({i}){ext}");
         }
 
         private static string ResolveTemplatePath()
@@ -128,9 +163,7 @@ namespace RingKnifeDetector.Services
 
         private static Dictionary<string, string> BuildMapping(ProjectInfo project, RecordParams p, string conclusion)
         {
-            var design = p.DesignRequirement.HasValue
-                ? (p.ResultType == "compaction_percent" ? $"≥{p.DesignRequirement:F2}%" : $"≥{p.DesignRequirement:F2}")
-                : "";
+            var design = FormatDesignRequirement(p);
             return new Dictionary<string, string>
             {
                 ["委托编号"] = project.EntrustNo,
@@ -142,22 +175,24 @@ namespace RingKnifeDetector.Services
                 ["工程名称"] = project.ProjectName,
                 ["单位地址"] = project.UnitAddress,
                 ["工程地址"] = project.ProjectAddress,
-                ["委托日期"] = project.EntrustDate,
+                ["委托日期"] = DateHelper.FormatWordDate(project.EntrustDate),
                 ["工程部位"] = project.ProjectSection,
-                ["报告日期"] = project.ReportDate,
+                ["报告日期"] = DateHelper.FormatWordDate(project.ReportDate),
                 ["检测性质"] = project.TestNature,
                 ["样品名称"] = p.SampleName,
                 ["材料种类"] = p.MaterialType,
                 ["环刀规格"] = p.RingSpec,
                 ["夯实方式"] = p.CompactionMethod,
                 ["设计要求"] = design,
-                ["最大干密度"] = Fmt(p.MaxDryDensity),
-                ["最优含水率"] = Fmt(p.OptimalMoisture),
+                ["最大干密度"] = FmtRaw(p.MaxDryDensity),
+                ["最优含水率"] = FmtRaw(p.OptimalMoisture),
                 ["检测依据"] = p.TestBasis,
                 ["判定依据"] = p.JudgeBasis,
                 ["检测结论"] = conclusion,
             };
         }
+
+        private const int HeaderRightTabPosition = 9360;
 
         private static void FillHeaderParagraphs(Body body, ProjectInfo project)
         {
@@ -176,7 +211,7 @@ namespace RingKnifeDetector.Services
             pPr.SpacingBetweenLines = new SpacingBetweenLines { After = "0", Line = "240", LineRule = LineSpacingRuleValues.Auto };
             pPr.Tabs = new Tabs(
                 new TabStop { Val = TabStopValues.Center, Position = 4680 },
-                new TabStop { Val = TabStopValues.Right, Position = 9360 });
+                new TabStop { Val = TabStopValues.Right, Position = HeaderRightTabPosition });
 
             AppendStyledRun(para, $"检测性质：{testNature}", true, BodyFontSizeHalfPoints);
             para.Append(new Run(new TabChar()));
@@ -184,6 +219,21 @@ namespace RingKnifeDetector.Services
             para.Append(new Run(new TabChar()));
             AppendStyledRun(para, $"报告编号：{reportNo}", true, BodyFontSizeHalfPoints);
         }
+
+        private static string FormatDesignRequirement(RecordParams p)
+        {
+            if (!string.IsNullOrWhiteSpace(p.DesignRequirementText))
+                return p.DesignRequirementText.Trim();
+
+            if (!p.DesignRequirement.HasValue)
+                return string.Empty;
+
+            var value = TrimDecimal(p.DesignRequirement.Value);
+            return p.ResultType == "compaction_percent" ? $"≥{value}%" : $"≥{value}";
+        }
+
+        private static string TrimDecimal(decimal value) =>
+            value.ToString(value % 1 == 0 ? "0" : "0.####################");
 
         private static void FillInspectorParagraph(Body body, string inspectorName)
         {
@@ -234,36 +284,41 @@ namespace RingKnifeDetector.Services
             ClearRowText(newRow);
             rows[1].InsertAfterSelf(newRow);
 
-            SetPhysicalCellText(newRow, 0, "监理单位");
-            SetPhysicalCellText(newRow, 2, "施工单位");
+            SetPhysicalCellText(newRow, 0, "监理单位", JustificationValues.Center, verticalCenter: true);
+            SetPhysicalCellText(newRow, 2, "施工单位", JustificationValues.Center, verticalCenter: true);
             return (11, 14, 15);
         }
 
         private static void FillProjectInfo(Table table, ProjectInfo project, RecordParams p)
         {
-            var design = p.DesignRequirement.HasValue
-                ? (p.ResultType == "compaction_percent" ? $"≥{p.DesignRequirement:F2}%" : $"≥{p.DesignRequirement:F2}")
-                : "";
+            var design = FormatDesignRequirement(p);
             var pairs = new (int row, int valCol, string val)[]
             {
                 (0, 1, project.EntrustUnit), (0, 3, project.Contact),
                 (1, 1, project.ProjectName), (1, 3, project.UnitAddress),
                 (2, 1, project.SupervisionUnit), (2, 3, project.ConstructionUnit),
-                (3, 1, project.ProjectAddress), (3, 3, project.EntrustDate),
-                (4, 1, project.ProjectSection), (4, 3, project.ReportDate),
+                (3, 1, project.ProjectAddress), (3, 3, DateHelper.FormatWordDate(project.EntrustDate)),
+                (4, 1, project.ProjectSection), (4, 3, DateHelper.FormatWordDate(project.ReportDate)),
                 (5, 1, p.SampleName), (5, 3, p.MaterialType),
                 (6, 1, p.RingSpec), (6, 3, p.CompactionMethod),
-                (7, 1, design), (7, 3, Fmt(p.MaxDryDensity)),
-                (8, 1, p.TestLocation), (8, 3, Fmt(p.OptimalMoisture)),
+                (7, 1, design), (7, 3, FmtRaw(p.MaxDryDensity)),
+                (8, 1, p.TestLocation), (8, 3, FmtRaw(p.OptimalMoisture)),
                 (9, 1, p.TestBasis), (9, 3, p.JudgeBasis),
             };
             foreach (var (row, valCol, val) in pairs)
             {
-                if (row == 2)
-                    SetPhysicalCellText(table, row, valCol, val, JustificationValues.Center, verticalCenter: true);
-                else
-                    SetPhysicalCellText(table, row, valCol, val);
+                if (row == 2) continue;
+                SetPhysicalCellText(table, row, valCol, val);
             }
+            FillSupervisionConstructionRow(table, project);
+        }
+
+        private static void FillSupervisionConstructionRow(Table table, ProjectInfo project)
+        {
+            SetPhysicalCellText(table, 2, 0, "监理单位", JustificationValues.Center, verticalCenter: true);
+            SetPhysicalCellText(table, 2, 1, project.SupervisionUnit, JustificationValues.Left, verticalCenter: true);
+            SetPhysicalCellText(table, 2, 2, "施工单位", JustificationValues.Center, verticalCenter: true);
+            SetPhysicalCellText(table, 2, 3, project.ConstructionUnit, JustificationValues.Left, verticalCenter: true);
         }
 
         private static void UpdateCompactionHeader(Table table, int headerRow, string resultType)
@@ -281,8 +336,8 @@ namespace RingKnifeDetector.Services
                 SetPhysicalCellText(table, row, 0, r.SampleNo);
                 SetPhysicalCellText(table, row, 1, r.Elevation);
                 SetPhysicalCellText(table, row, 2, r.Thickness);
-                SetPhysicalCellText(table, row, 3, r.SamplingDate);
-                SetPhysicalCellText(table, row, 4, r.TestDate);
+                SetPhysicalCellText(table, row, 3, DateHelper.FormatWordDate(r.SamplingDate));
+                SetPhysicalCellText(table, row, 4, DateHelper.FormatWordDate(r.TestDate));
                 SetPhysicalCellText(table, row, 5, Fmt(r.AvgWetDensity ?? r.WetDensity));
                 SetPhysicalCellText(table, row, 6, Fmt(r.AvgMoisture));
                 SetPhysicalCellText(table, row, 7, Fmt(r.AvgDryDensity ?? r.DryDensity));
@@ -336,6 +391,9 @@ namespace RingKnifeDetector.Services
 
         private static string Fmt(decimal? v) => v.HasValue ? v.Value.ToString("F2") : "";
 
+        private static string FmtRaw(decimal? v) =>
+            v.HasValue ? TrimDecimal(v.Value) : string.Empty;
+
         private static string GetPhysicalCellText(TableRow row, int physicalCol)
         {
             var cells = row.Elements<TableCell>().ToList();
@@ -360,6 +418,14 @@ namespace RingKnifeDetector.Services
             var cells = row.Elements<TableCell>().ToList();
             if (physicalCol < 0 || physicalCol >= cells.Count) return;
             SetCellText(cells[physicalCol], value ?? "");
+        }
+
+        private static void SetPhysicalCellText(TableRow row, int physicalCol, string value,
+            JustificationValues? alignment, bool verticalCenter)
+        {
+            var cells = row.Elements<TableCell>().ToList();
+            if (physicalCol < 0 || physicalCol >= cells.Count) return;
+            SetCellText(cells[physicalCol], value ?? "", alignment, verticalCenter);
         }
 
         private static void ClearRowText(TableRow row)

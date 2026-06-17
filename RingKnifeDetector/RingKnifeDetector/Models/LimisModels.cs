@@ -83,6 +83,8 @@ namespace RingKnifeDetector.Models
         public string Executor { get; set; } = string.Empty;
         public string TestItems { get; set; } = string.Empty;
         public int? RemainDays { get; set; }
+        /// <summary>本地草稿主检人（无草稿为空）</summary>
+        public string DraftInspector { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -148,6 +150,8 @@ namespace RingKnifeDetector.Models
         public string SampleNoPrefix { get; set; } = string.Empty;
         /// <summary>报告页脚备注（可编辑，与LIMIS原始记录备注无关）</summary>
         public string ReportRemarks { get; set; } = string.Empty;
+        /// <summary>保存草稿时的主检姓名</summary>
+        public string SavedByInspector { get; set; } = string.Empty;
     }
 
     /// <summary>

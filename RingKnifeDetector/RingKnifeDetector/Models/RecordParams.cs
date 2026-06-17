@@ -43,6 +43,11 @@ namespace RingKnifeDetector.Models
         public decimal? DesignRequirement { get; set; }
 
         /// <summary>
+        /// 设计要求原文（导出 Word 时按此显示，如 ≥90%）
+        /// </summary>
+        public string DesignRequirementText { get; set; } = string.Empty;
+
+        /// <summary>
         /// 样品名称
         /// </summary>
         public string SampleName { get; set; } = "回填土";

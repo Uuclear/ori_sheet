@@ -168,15 +168,30 @@ namespace RingKnifeDetector.Services
             }
         }
 
-        /// <summary>
-        /// 获取草稿文件路径
-        /// </summary>
-        private string GetDraftFilePath(string entrustNo)
+        public string GetDraftFilePath(string entrustNo)
         {
-            // 清理文件名中的非法字符
             var invalidChars = Path.GetInvalidFileNameChars();
             var sanitizedNo = new string(entrustNo.Where(c => !invalidChars.Contains(c)).ToArray());
             return Path.Combine(_draftDirectory, $"{sanitizedNo}.json");
+        }
+
+        public string? GetDraftInspector(string entrustNo)
+        {
+            if (string.IsNullOrWhiteSpace(entrustNo)) return null;
+            var loaded = LoadDraft(entrustNo);
+            if (!loaded.Success || loaded.Draft == null) return null;
+            return string.IsNullOrWhiteSpace(loaded.Draft.SavedByInspector) ? null : loaded.Draft.SavedByInspector.Trim();
+        }
+
+        public Dictionary<string, string> GetDraftInspectorMap()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var info in GetDraftList())
+            {
+                if (!string.IsNullOrWhiteSpace(info.InspectorName))
+                    map[info.EntrustNo] = info.InspectorName;
+            }
+            return map;
         }
 
         /// <summary>
@@ -214,6 +229,7 @@ namespace RingKnifeDetector.Services
                         {
                             EntrustNo = entrustNo,
                             ProjectName = draft?.Project?.ProjectName ?? string.Empty,
+                            InspectorName = draft?.SavedByInspector ?? string.Empty,
                             UpdatedAt = fileInfo.LastWriteTime,
                             FilePath = file
                         });
@@ -240,6 +256,7 @@ namespace RingKnifeDetector.Services
     {
         public string EntrustNo { get; set; } = string.Empty;
         public string ProjectName { get; set; } = string.Empty;
+        public string InspectorName { get; set; } = string.Empty;
         public DateTime UpdatedAt { get; set; }
         public string FilePath { get; set; } = string.Empty;
     }
