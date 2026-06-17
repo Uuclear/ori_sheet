@@ -97,6 +97,7 @@
                 <Grid Grid.Row="1" Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="140"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="txtSearchKeyword" Grid.Column="0" Height="28" VerticalContentAlignment="Center">
@@ -110,7 +111,14 @@
                             </Style>
                         </TextBox.Style>
                     </TextBox>
-                    <Button Grid.Column="1" Content="搜索" Width="80" Height="28" Margin="10,0,0,0"
+                    <ComboBox x:Name="cmbTaskStatusFilter" Grid.Column="1" Height="28" Margin="8,0,0,0"
+                              SelectedIndex="0" VerticalContentAlignment="Center">
+                        <ComboBoxItem Content="全部状态" Tag=""/>
+                        <ComboBoxItem Content="已完成" Tag="已完成"/>
+                        <ComboBoxItem Content="进行中" Tag="进行中"/>
+                        <ComboBoxItem Content="待分配" Tag="待分配"/>
+                    </ComboBox>
+                    <Button Grid.Column="2" Content="搜索" Width="80" Height="28" Margin="10,0,0,0"
                             Click="BtnSearch_Click" Style="{StaticResource ActionBlue}"/>
                 </Grid>
 
@@ -127,6 +135,7 @@
                         <DataGridTextColumn Header="工程部位" Binding="{Binding PrincipalPart}" Width="130"/>
                         <DataGridTextColumn Header="状态" Binding="{Binding StatusName}" Width="100"/>
                         <DataGridTextColumn Header="剩余天数" Binding="{Binding RemainDays}" Width="80"/>
+                        <DataGridTextColumn Header="草稿主检" Binding="{Binding DraftInspector}" Width="90"/>
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -147,7 +156,7 @@
                 <StackPanel Margin="0,0,0,10">
 
                     <!-- 报告抬头信息 -->
-                    <Grid Margin="0,0,0,8">
+                    <Grid x:Name="gridHeaderInfo" Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -179,7 +188,7 @@
 
                     <!-- 工程信息 -->
                     <GroupBox Header="工程信息" Margin="0,0,0,8" Padding="6">
-                        <Grid>
+                        <Grid x:Name="gridProjectInfo">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -223,7 +232,7 @@
 
                     <!-- 检测参数 -->
                     <GroupBox Header="检测参数" Margin="0,0,0,8" Padding="6">
-                        <Grid>
+                        <Grid x:Name="gridParams">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -274,8 +283,7 @@
 
                     <!-- 原始记录备注（LIMIS） -->
                     <GroupBox Header="原始记录备注（LIMIS）" Margin="0,0,0,8" Padding="6">
-                        <TextBox x:Name="txtLimisRemark" Style="{StaticResource CellInput}" MinHeight="48"
-                                 TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+                        <views:RemarkHighlightViewer x:Name="remarkViewer"/>
                     </GroupBox>
 
                     <!-- 原始记录 -->
@@ -343,7 +351,6 @@
                     <!-- 操作栏 -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                         <Button Content="计算" Style="{StaticResource ActionGreen}" Click="BtnCalculate_Click"/>
-                        <Button Content="导出 Excel" Style="{StaticResource ActionBlue}" Click="BtnExportExcel_Click"/>
                         <Button Content="导出 Word" Style="{StaticResource ActionBlue}" Click="BtnExportWord_Click"/>
                         <Button Content="保存草稿" Style="{StaticResource ActionBlue}" Click="BtnSaveDraft_Click"/>
                         <Button Content="清空" Style="{StaticResource ActionRed}" Click="BtnClear_Click"/>

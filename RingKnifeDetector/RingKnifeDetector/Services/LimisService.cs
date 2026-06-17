@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using RingKnifeDetector.Helpers;
 using RingKnifeDetector.Models;
 
 namespace RingKnifeDetector.Services
@@ -641,7 +642,7 @@ namespace RingKnifeDetector.Services
             if (row.TryGetValue("testingOrderNo", out var entrustNoObj))
                 entrustNoValue = entrustNoObj?.ToString() ?? string.Empty;
 
-            return new ProjectInfo
+            var project = new ProjectInfo
             {
                 EntrustNo = string.IsNullOrEmpty(entrustNoValue) ? entrustNo : entrustNoValue,
                 ReportNo = reportNo,
@@ -657,6 +658,8 @@ namespace RingKnifeDetector.Services
                 ReportDate = reportDate,
                 TestNature = testNature
             };
+            TextSanitizer.SanitizeProject(project);
+            return project;
         }
 
         /// <summary>

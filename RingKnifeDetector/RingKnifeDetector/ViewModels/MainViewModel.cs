@@ -13,7 +13,6 @@ namespace RingKnifeDetector.ViewModels
     {
         private readonly CalculationService _calculationService;
         private readonly LimisService _limisService;
-        private readonly ExcelExportService _excelExportService;
         private readonly DraftService _draftService;
         private readonly SettingsService _settingsService;
 
@@ -24,7 +23,6 @@ namespace RingKnifeDetector.ViewModels
         {
             _calculationService = new CalculationService();
             _limisService = new LimisService();
-            _excelExportService = new ExcelExportService();
             _draftService = new DraftService();
             _settingsService = new SettingsService();
 

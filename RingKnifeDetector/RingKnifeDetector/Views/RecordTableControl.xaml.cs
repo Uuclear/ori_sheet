@@ -13,12 +13,13 @@ namespace RingKnifeDetector.Views
         private const int ColCount = 21;
         private static readonly double[] ColWidths =
         {
-            140, 60, 96, 96,
+            140, 60, 96, 176,
             68, 60, 60, 60, 60, 68,
             52, 60, 34, 34, 60, 56, 56, 68,
             60, 68, 60
         };
         private readonly List<(int col, int row, Control control)> _tabStops = new();
+        private readonly List<Control> _tabOrderControls = new();
         private List<RingKnifeSample> _samples = new();
         private List<SamplePointResult> _results = new();
         private RecordParams _params = new();
@@ -29,6 +30,7 @@ namespace RingKnifeDetector.Views
 
         public event EventHandler? SamplesChanged;
         public event EventHandler<int>? DeleteBlockRequested;
+        public event Action<string>? TestRangeEndChanged;
 
         public RecordTableControl()
         {
@@ -43,6 +45,22 @@ namespace RingKnifeDetector.Views
             menu.Items.Add(deleteItem);
             ContextMenu = menu;
             MouseRightButtonUp += OnMouseRightButtonUp;
+            PreviewKeyDown += OnTablePreviewKeyDown;
+        }
+
+        private void OnTablePreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter || Keyboard.FocusedElement is not Control focused) return;
+            if (!_tabOrderControls.Contains(focused)) return;
+            e.Handled = true;
+            MoveFocusToNext(focused);
+        }
+
+        private void MoveFocusToNext(Control current)
+        {
+            var idx = _tabOrderControls.IndexOf(current);
+            if (idx < 0 || idx >= _tabOrderControls.Count - 1) return;
+            _tabOrderControls[idx + 1].Focus();
         }
 
         private int _contextBlockIndex = -1;
@@ -101,6 +119,7 @@ namespace RingKnifeDetector.Views
             TableHost.RowDefinitions.Clear();
             TableHost.ColumnDefinitions.Clear();
             _tabStops.Clear();
+            _tabOrderControls.Clear();
 
             KeyboardNavigation.SetTabNavigation(TableHost, KeyboardNavigationMode.Local);
 
@@ -149,13 +168,12 @@ namespace RingKnifeDetector.Views
                             RegisterTab(sampling, 2, dataStart);
                             AddCell(dataStart, 2, row, 2, totalDataRows, sampling, false);
 
-                            var testDate = MakeGlobalDate(_globalTestDate, v =>
+                            var testRange = MakeGlobalTestDateRange(_globalTestDate, v =>
                             {
                                 _globalTestDate = v;
                                 SyncGlobalDates(v, false);
-                            });
-                            RegisterTab(testDate, 3, dataStart);
-                            AddCell(dataStart, 3, row, 3, totalDataRows, testDate, false);
+                            }, dataStart);
+                            AddCell(dataStart, 3, row, 3, totalDataRows, testRange, false);
                             datesPlaced = true;
                         }
                     }
@@ -252,13 +270,25 @@ namespace RingKnifeDetector.Views
             control.IsTabStop = true;
             control.Focusable = true;
             _tabStops.Add((col, row, control));
+            control.PreviewKeyDown += OnEditablePreviewKeyDown;
+        }
+
+        private void OnEditablePreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter || sender is not Control current) return;
+            e.Handled = true;
+            MoveFocusToNext(current);
         }
 
         private void ApplyTabOrder()
         {
+            _tabOrderControls.Clear();
             var idx = 1;
             foreach (var (_, _, control) in _tabStops.OrderBy(t => t.col).ThenBy(t => t.row))
+            {
                 control.TabIndex = idx++;
+                _tabOrderControls.Add(control);
+            }
         }
 
         private void EnsureRings(RingKnifeSample? sample)
@@ -280,8 +310,22 @@ namespace RingKnifeDetector.Views
         {
             foreach (var s in _samples)
             {
-                if (isSampling) s.SamplingDate = value;
-                else s.TestDate = value;
+                if (isSampling)
+                    s.SamplingDate = value;
+                else
+                    s.TestDate = value;
+            }
+            if (!isSampling)
+            {
+                var (start, end) = DateHelper.ParseRange(value);
+                if (!string.IsNullOrEmpty(start))
+                {
+                    _globalSamplingDate = start;
+                    foreach (var s in _samples)
+                        s.SamplingDate = start;
+                }
+                if (!string.IsNullOrEmpty(end))
+                    TestRangeEndChanged?.Invoke(end);
             }
             SamplesChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -310,7 +354,7 @@ namespace RingKnifeDetector.Views
             row++;
             var h2 = new (string text, int colspan)[]
             {
-                ("取样日期", 1), ("检测日期", 1),
+                ("取样日期", 1), ("检测日期\n(起~止)", 1),
                 ("环刀和样\n质量(g)", 1), ("环刀质量\n(g)", 1), ("环刀容积\n(cm³)", 1),
                 ("湿土质量\n(g)", 1), ("湿密度\n(g/cm³)", 1), ("平均湿密度\n(g/cm³)", 1),
                 ("铝盒号", 1), ("铝盒质量\n(g)", 1), ("湿样+铝盒\n质量(g)", 2),
@@ -413,6 +457,56 @@ namespace RingKnifeDetector.Views
                 tb.TextChanged += (_, _) => { set(sample, tb.Text); SamplesChanged?.Invoke(this, EventArgs.Empty); };
             }
             return tb;
+        }
+
+        private FrameworkElement MakeGlobalTestDateRange(string field, Action<string> onChange, int tabRowStart)
+        {
+            var (start, end) = DateHelper.ParseRange(field);
+            var panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var dpStart = new DatePicker
+            {
+                SelectedDate = DateHelper.TryParse(start) ?? DateTime.Today,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Padding = new Thickness(1),
+                Width = 78,
+                IsTabStop = true,
+                Focusable = true
+            };
+            var dpEnd = new DatePicker
+            {
+                SelectedDate = DateHelper.TryParse(end) ?? DateTime.Today,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Padding = new Thickness(1),
+                Width = 78,
+                IsTabStop = true,
+                Focusable = true
+            };
+
+            panel.Children.Add(dpStart);
+            panel.Children.Add(new TextBlock
+            {
+                Text = "~",
+                Margin = new Thickness(2, 0, 2, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 11
+            });
+            panel.Children.Add(dpEnd);
+
+            void Emit() => onChange(DateHelper.FormatRange(dpStart.SelectedDate, dpEnd.SelectedDate));
+            dpStart.SelectedDateChanged += (_, _) => Emit();
+            dpEnd.SelectedDateChanged += (_, _) => Emit();
+
+            RegisterTab(dpStart, 3, tabRowStart);
+            RegisterTab(dpEnd, 3, tabRowStart + 1);
+            return panel;
         }
 
         private DatePicker MakeGlobalDate(string field, Action<string> onChange)
