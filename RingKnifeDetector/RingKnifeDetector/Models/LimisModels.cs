@@ -31,6 +31,15 @@ namespace RingKnifeDetector.Models
         public string SampleNo { get; set; } = string.Empty;
         public string SampleName { get; set; } = string.Empty;
         public string Remark { get; set; } = string.Empty;
+        /// <summary>规格型号（见证送样）</summary>
+        public string TypeSpecification { get; set; } = string.Empty;
+        /// <summary>检测依据/检测标准（可从 LIMIS 委托单 HTML 获取）</summary>
+        public string TestBasis { get; set; } = string.Empty;
+        public bool IsWitnessSampling { get; set; }
+        /// <summary>样品名称是否来自委托单 HTML（见证送样）</summary>
+        public bool SampleNameFromHtml { get; set; }
+        /// <summary>检测依据是否来自委托单 HTML</summary>
+        public bool TestBasisFromHtml { get; set; }
     }
 
     /// <summary>
@@ -43,6 +52,9 @@ namespace RingKnifeDetector.Models
         public string Password { get; set; } = string.Empty;
         public string RealName { get; set; } = string.Empty;
         public string DefaultReportRemarks { get; set; } = ReportDefaults.DefaultReportRemarks;
+        public int ReportRemarksTemplateVersion { get; set; }
+        public string DefaultApprover { get; set; } = string.Empty;
+        public string DefaultReviewer { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -152,6 +164,8 @@ namespace RingKnifeDetector.Models
         public string ReportRemarks { get; set; } = string.Empty;
         /// <summary>保存草稿时的主检姓名</summary>
         public string SavedByInspector { get; set; } = string.Empty;
+        public string SavedApprover { get; set; } = string.Empty;
+        public string SavedReviewer { get; set; } = string.Empty;
     }
 
     /// <summary>

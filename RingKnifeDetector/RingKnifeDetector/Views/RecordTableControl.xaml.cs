@@ -13,7 +13,7 @@ namespace RingKnifeDetector.Views
         private const int ColCount = 21;
         private static readonly double[] ColWidths =
         {
-            140, 60, 96, 176,
+            140, 60, 132, 132,
             68, 60, 60, 60, 60, 68,
             52, 60, 34, 34, 60, 56, 56, 68,
             60, 68, 60
@@ -126,6 +126,13 @@ namespace RingKnifeDetector.Views
             for (int i = 0; i < ColCount; i++)
                 TableHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ColWidths[i]) });
 
+            if (_ringsPerBlock == 3)
+            {
+                TableHost.ColumnDefinitions[9].Width = new GridLength(0);
+                TableHost.ColumnDefinitions[17].Width = new GridLength(0);
+                TableHost.ColumnDefinitions[19].Width = new GridLength(0);
+            }
+
             int row = 0;
             BuildHeader(ref row);
 
@@ -160,17 +167,17 @@ namespace RingKnifeDetector.Views
 
                         if (!datesPlaced)
                         {
-                            var sampling = MakeGlobalDate(_globalSamplingDate, v =>
+                            var sampling = MakeGlobalDateField(_globalSamplingDate, v =>
                             {
-                                _globalSamplingDate = v;
-                                SyncGlobalDates(v, true);
+                                _globalSamplingDate = DateHelper.Normalize(v);
+                                SyncGlobalDates(_globalSamplingDate, true);
                             });
                             RegisterTab(sampling, 2, dataStart);
                             AddCell(dataStart, 2, row, 2, totalDataRows, sampling, false);
 
-                            var testRange = MakeGlobalTestDateRange(_globalTestDate, v =>
+                            var testRange = MakeGlobalTestDateRangeField(_globalTestDate, v =>
                             {
-                                _globalTestDate = v;
+                                _globalTestDate = DateHelper.FormatWordDate(v);
                                 SyncGlobalDates(v, false);
                             }, dataStart);
                             AddCell(dataStart, 3, row, 3, totalDataRows, testRange, false);
@@ -188,13 +195,13 @@ namespace RingKnifeDetector.Views
                         RegisterTab(ringMass, 5, row);
                         AddCell(row, 5, row, 5, 2, ringMass, false, ringPairNext);
                         AddCell(row, 6, row, 6, 2, MakeReadOnlyText((ring.RingVolume ?? 200).ToString()), true, ringPairNext);
-                        AddCell(row, 7, row, 7, 2, MakeReadOnlyText(Format(ringResult?.WetMass)), true, ringPairNext);
-                        AddCell(row, 8, row, 8, 2, MakeReadOnlyText(Format(ringResult?.WetDensity)), true, ringPairNext);
+                        AddCell(row, 7, row, 7, 2, MakeReadOnlyText(FormatMass(ringResult?.WetMass)), true, ringPairNext);
+                        AddCell(row, 8, row, 8, 2, MakeReadOnlyText(FormatDensity(ringResult?.WetDensity)), true, ringPairNext);
                     }
 
-                    if (isFirstRing)
+                    if (isFirstRing && _ringsPerBlock != 3)
                     {
-                        AddCell(blockStart, 9, row, 9, RowsPerBlock, MakeReadOnlyText(Format(result?.AvgWetDensity ?? result?.WetDensity)), true);
+                        AddCell(blockStart, 9, row, 9, RowsPerBlock, MakeReadOnlyText(FormatDensity(result?.AvgWetDensity ?? result?.WetDensity)), true);
                     }
 
                     if (ring != null)
@@ -215,22 +222,35 @@ namespace RingKnifeDetector.Views
                         var box1Dry = MakeBoxDecimal(box1, b => b.DrySampleMass, (b, v) => b.DrySampleMass = v);
                         RegisterTab(box1Dry, 14, row);
                         AddCell(row, 14, box1Dry, false, ringPairNext);
-                        AddCell(row, 15, MakeReadOnlyText(Format(ringResult?.MoistureRates.ElementAtOrDefault(0))), true, ringPairNext);
-                        AddCell(row, 16, row, 16, 2, MakeReadOnlyText(Format(ringResult?.AvgMoisture)), true, ringPairNext);
+                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(0))), true, ringPairNext);
+                        AddCell(row, 16, row, 16, 2, MakeReadOnlyText(FormatMoisture(ringResult?.AvgMoisture)), true, ringPairNext);
                     }
 
-                    if (isFirstRing)
+                    if (isFirstRing && _ringsPerBlock != 3)
                     {
-                        AddCell(blockStart, 17, row, 17, RowsPerBlock, MakeReadOnlyText(Format(result?.AvgMoisture)), true);
+                        AddCell(blockStart, 17, row, 17, RowsPerBlock, MakeReadOnlyText(FormatMoisture(result?.AvgMoisture)), true);
                     }
 
                     if (ring != null)
-                        AddCell(row, 18, row, 18, 2, MakeReadOnlyText(Format(ringResult?.DryDensity)), true, ringPairNext);
+                        AddCell(row, 18, row, 18, 2, MakeReadOnlyText(FormatDensity(ringResult?.DryDensity)), true, ringPairNext);
 
-                    if (isFirstRing)
+                    if (isFirstRing && _ringsPerBlock != 3)
                     {
-                        AddCell(blockStart, 19, row, 19, RowsPerBlock, MakeReadOnlyText(Format(result?.AvgDryDensity ?? result?.DryDensity)), true);
-                        var compaction = _resultType == "compaction_percent" ? Format(result?.CompactionPercent) : Format(result?.CompactionCoeff);
+                        AddCell(blockStart, 19, row, 19, RowsPerBlock, MakeReadOnlyText(FormatDensity(result?.AvgDryDensity ?? result?.DryDensity)), true);
+                    }
+
+                    if (_ringsPerBlock == 3)
+                    {
+                        var compaction = _resultType == "compaction_percent"
+                            ? CompactionFormat.FormatPercent(ringResult?.CompactionPercent)
+                            : CompactionFormat.FormatCoeff(ringResult?.CompactionCoeff);
+                        AddCell(row, 20, row, 20, 2, MakeReadOnlyText(compaction), true, ringPairNext);
+                    }
+                    else if (isFirstRing)
+                    {
+                        var compaction = _resultType == "compaction_percent"
+                            ? CompactionFormat.FormatPercent(result?.CompactionPercent)
+                            : CompactionFormat.FormatCoeff(result?.CompactionCoeff);
                         AddCell(blockStart, 20, row, 20, RowsPerBlock, MakeReadOnlyText(compaction), true);
                     }
 
@@ -256,7 +276,7 @@ namespace RingKnifeDetector.Views
                         var box2Dry = MakeBoxDecimal(box2, b => b.DrySampleMass, (b, v) => b.DrySampleMass = v);
                         RegisterTab(box2Dry, 14, row);
                         AddCell(row, 14, box2Dry, false);
-                        AddCell(row, 15, MakeReadOnlyText(Format(ringResult?.MoistureRates.ElementAtOrDefault(1))), true);
+                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(1))), true);
                     }
                     row++;
                 }
@@ -308,12 +328,13 @@ namespace RingKnifeDetector.Views
 
         private void SyncGlobalDates(string value, bool isSampling)
         {
+            var normalized = isSampling ? DateHelper.Normalize(value) : DateHelper.FormatWordDate(value);
             foreach (var s in _samples)
             {
                 if (isSampling)
-                    s.SamplingDate = value;
+                    s.SamplingDate = normalized;
                 else
-                    s.TestDate = value;
+                    s.TestDate = normalized;
             }
             if (!isSampling)
             {
@@ -335,37 +356,35 @@ namespace RingKnifeDetector.Views
             TableHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             TableHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var h1 = new (string text, int colspan, int rowspan)[]
-            {
-                ("样品编号", 1, 2), ("测点标高\n(mm)", 1, 2), ("日期", 2, 1),
-                ("土样湿密度(g/cm³)", 6, 1),
-                ("含水率(%)", 8, 1),
-                ("土样干密度\n(g/cm³)", 1, 2), ("干密度平均值\n(g/cm³)", 1, 2),
-                (_resultType == "compaction_percent" ? "压实度%" : "压实系数", 1, 2)
-            };
-
-            int col = 0;
-            foreach (var (text, colspan, rowspan) in h1)
-            {
-                AddHeaderCell(row, col, text, colspan, rowspan);
-                col += colspan;
-            }
+            var hideGroupAvg = _ringsPerBlock == 3;
+            AddHeaderCell(row, 0, "样品编号", 1, 2);
+            AddHeaderCell(row, 1, "测点标高\n(mm)", 1, 2);
+            AddHeaderCell(row, 2, "日期", 2, 1);
+            AddHeaderCell(row, 4, "土样湿密度(g/cm³)", hideGroupAvg ? 5 : 6, 1);
+            AddHeaderCell(row, 10, "含水率(%)", hideGroupAvg ? 7 : 8, 1);
+            AddHeaderCell(row, 18, "土样干密度\n(g/cm³)", 1, 2);
+            if (!hideGroupAvg)
+                AddHeaderCell(row, 19, "干密度平均值\n(g/cm³)", 1, 2);
+            AddHeaderCell(row, 20, _resultType == "compaction_percent" ? "压实度%" : "压实系数", 1, 2);
 
             row++;
-            var h2 = new (string text, int colspan)[]
-            {
-                ("取样日期", 1), ("检测日期\n(起~止)", 1),
-                ("环刀和样\n质量(g)", 1), ("环刀质量\n(g)", 1), ("环刀容积\n(cm³)", 1),
-                ("湿土质量\n(g)", 1), ("湿密度\n(g/cm³)", 1), ("平均湿密度\n(g/cm³)", 1),
-                ("铝盒号", 1), ("铝盒质量\n(g)", 1), ("湿样+铝盒\n质量(g)", 2),
-                ("干样+铝盒\n质量(g)", 1), ("含水率\n(%)", 1), ("平均值\n(%)", 1), ("含水率\n平均值(%)", 1)
-            };
-            col = 2;
-            foreach (var (text, colspan) in h2)
-            {
-                AddHeaderCell(row, col, text, colspan, 1);
-                col += colspan;
-            }
+            AddHeaderCell(row, 2, "取样日期", 1, 1);
+            AddHeaderCell(row, 3, "检测日期\n(起~止)", 1, 1);
+            AddHeaderCell(row, 4, "环刀和样\n质量(g)", 1, 1);
+            AddHeaderCell(row, 5, "环刀质量\n(g)", 1, 1);
+            AddHeaderCell(row, 6, "环刀容积\n(cm³)", 1, 1);
+            AddHeaderCell(row, 7, "湿土质量\n(g)", 1, 1);
+            AddHeaderCell(row, 8, "湿密度\n(g/cm³)", 1, 1);
+            if (!hideGroupAvg)
+                AddHeaderCell(row, 9, "平均湿密度\n(g/cm³)", 1, 1);
+            AddHeaderCell(row, 10, "铝盒号", 1, 1);
+            AddHeaderCell(row, 11, "铝盒质量\n(g)", 1, 1);
+            AddHeaderCell(row, 12, "湿样+铝盒\n质量(g)", 2, 1);
+            AddHeaderCell(row, 14, "干样+铝盒\n质量(g)", 1, 1);
+            AddHeaderCell(row, 15, "含水率\n(%)", 1, 1);
+            AddHeaderCell(row, 16, "平均值\n(%)", 1, 1);
+            if (!hideGroupAvg)
+                AddHeaderCell(row, 17, "含水率\n平均值(%)", 1, 1);
             row++;
         }
 
@@ -459,71 +478,23 @@ namespace RingKnifeDetector.Views
             return tb;
         }
 
-        private FrameworkElement MakeGlobalTestDateRange(string field, Action<string> onChange, int tabRowStart)
+        private ChineseDateField MakeGlobalDateField(string field, Action<string> onChange)
         {
-            var (start, end) = DateHelper.ParseRange(field);
-            var panel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            var dpStart = new DatePicker
-            {
-                SelectedDate = DateHelper.TryParse(start) ?? DateTime.Today,
-                BorderThickness = new Thickness(0),
-                FontSize = 10,
-                Padding = new Thickness(1),
-                Width = 78,
-                IsTabStop = true,
-                Focusable = true
-            };
-            var dpEnd = new DatePicker
-            {
-                SelectedDate = DateHelper.TryParse(end) ?? DateTime.Today,
-                BorderThickness = new Thickness(0),
-                FontSize = 10,
-                Padding = new Thickness(1),
-                Width = 78,
-                IsTabStop = true,
-                Focusable = true
-            };
-
-            panel.Children.Add(dpStart);
-            panel.Children.Add(new TextBlock
-            {
-                Text = "~",
-                Margin = new Thickness(2, 0, 2, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                FontSize = 11
-            });
-            panel.Children.Add(dpEnd);
-
-            void Emit() => onChange(DateHelper.FormatRange(dpStart.SelectedDate, dpEnd.SelectedDate));
-            dpStart.SelectedDateChanged += (_, _) => Emit();
-            dpEnd.SelectedDateChanged += (_, _) => Emit();
-
-            RegisterTab(dpStart, 3, tabRowStart);
-            RegisterTab(dpEnd, 3, tabRowStart + 1);
-            return panel;
+            var control = new ChineseDateField();
+            control.ApplyCompactStyle();
+            control.SetDate(field);
+            control.ValueChanged += (_, _) => onChange(control.NormalizedValue);
+            return control;
         }
 
-        private DatePicker MakeGlobalDate(string field, Action<string> onChange)
+        private ChineseDateRangeField MakeGlobalTestDateRangeField(string field, Action<string> onChange, int tabRowStart)
         {
-            var dp = new DatePicker
-            {
-                SelectedDate = DateHelper.TryParse(field) ?? DateTime.Today,
-                BorderThickness = new Thickness(0),
-                FontSize = 11,
-                Padding = new Thickness(2),
-                VerticalAlignment = VerticalAlignment.Center,
-                Width = 92,
-                IsTabStop = true,
-                Focusable = true
-            };
-            dp.SelectedDateChanged += (_, _) => onChange(DateHelper.Format(dp.SelectedDate));
-            return dp;
+            var control = new ChineseDateRangeField();
+            control.ApplyCompactStyle();
+            control.SetRange(field);
+            control.ValueChanged += (_, _) => onChange(control.RangeValue);
+            control.RegisterTabOrder(RegisterTab, 3, tabRowStart, tabRowStart + 1);
+            return control;
         }
 
         private TextBox MakeRingDecimal(RingMeasurement ring, Func<RingMeasurement, decimal?> get, Action<RingMeasurement, decimal?> set)
@@ -579,6 +550,10 @@ namespace RingKnifeDetector.Views
             return tb;
         }
 
-        private static string Format(decimal? v) => v.HasValue ? v.Value.ToString("F2") : "";
+        private static string FormatMass(decimal? v) => v.HasValue ? v.Value.ToString("F2") : "";
+
+        private static string FormatMoisture(decimal? v) => CompactionFormat.FormatMoisture(v);
+
+        private static string FormatDensity(decimal? v) => CompactionFormat.FormatDensity(v);
     }
 }

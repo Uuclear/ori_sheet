@@ -13,6 +13,45 @@ public class RemarkParserTests
         "委托组数:1组压实度≥90% 最大干密度1.64g/cm³, 最佳含水率13.8%";
 
     [Fact]
+    public void FillMissing_SetsPlaceholderForCompactionAndJudgeWhenNotInRemark()
+    {
+        var project = new ProjectInfo();
+        var parameters = new RecordParams { JudgeBasis = "JTG 3450-2019" };
+        var samples = new List<RingKnifeSample> { new() };
+
+        RemarkParser.FillMissing(project, parameters, samples, "压实度≥90%");
+
+        Assert.Equal(ReportDefaults.MissingFieldPlaceholder, parameters.CompactionMethod);
+        Assert.Equal(ReportDefaults.MissingFieldPlaceholder, parameters.JudgeBasis);
+    }
+
+    [Fact]
+    public void FillMissing_ExtractsFieldsWithoutColons()
+    {
+        const string remark =
+            "工程部位二跑道回填\n" +
+            "监理单位上海监理公司\n" +
+            "施工单位上海公路桥梁（集团）有限公司\n" +
+            "品种粉细砂\n" +
+            "取样部位土基层\n" +
+            "最大干密度1.64g/cm³ 最佳含水率13.8% 设计要求压实度≥90%";
+
+        var project = new ProjectInfo();
+        var parameters = new RecordParams();
+        var samples = new List<RingKnifeSample> { new() };
+
+        RemarkParser.FillMissing(project, parameters, samples, remark);
+
+        Assert.Contains("二跑道", project.ProjectSection);
+        Assert.Contains("上海监理", project.SupervisionUnit);
+        Assert.Contains("上海公路桥梁", project.ConstructionUnit);
+        Assert.Equal("粉细砂", parameters.MaterialType);
+        Assert.Equal("土基层", parameters.TestLocation);
+        Assert.Equal(1.64m, parameters.MaxDryDensity);
+        Assert.Equal(90m, parameters.DesignRequirement);
+    }
+
+    [Fact]
     public void FillMissing_ExtractsFieldsFromRemark()
     {
         var project = new ProjectInfo();
@@ -311,5 +350,47 @@ public class RemarkParserTests
 
         var densityHighlight = result.Highlights.Single(h => h.Label == "毛体积密度");
         Assert.Equal("2.269g/cm3", remark.Substring(densityHighlight.Start, densityHighlight.Length));
+    }
+
+    [Fact]
+    public void FillMissing_ExtractsGluedTG11_260327Remark()
+    {
+        const string remark =
+            "最大干密度:1.71g/cm最佳含水率:16.5%材料种美:素土设计要求:压实度(环刀)294%取样部位:土基层取祥层厚度:300mm取样时间:2026.6.8取样300mm标高:250mm";
+
+        var project = new ProjectInfo();
+        var parameters = new RecordParams();
+        var samples = new List<RingKnifeSample> { new() };
+
+        RemarkParser.FillMissing(project, parameters, samples, remark);
+
+        Assert.Equal(1.71m, parameters.MaxDryDensity);
+        Assert.Equal(16.5m, parameters.OptimalMoisture);
+        Assert.Equal("素土", parameters.MaterialType);
+        Assert.Equal(94m, parameters.DesignRequirement);
+        Assert.Equal("≥94%", parameters.DesignRequirementText);
+        Assert.Equal("compaction_percent", parameters.ResultType);
+        Assert.Equal("土基层", parameters.TestLocation);
+        Assert.Equal("300", samples[0].Thickness);
+        Assert.Equal("250", samples[0].Elevation);
+    }
+
+    [Fact]
+    public void FillMissing_ExtractsSpacedTG11_260327Remark()
+    {
+        const string remark =
+            "最大干密度：1.71g/cm³ 最佳含水率：16.5% 材料种类：素土 设计要求：压实度（环刀）≥94% 取样部位：土基层 取样层厚度：300mm 取样时间：2026-6-8 取样标高：250mm";
+
+        var project = new ProjectInfo();
+        var parameters = new RecordParams();
+        var samples = new List<RingKnifeSample> { new() };
+
+        RemarkParser.FillMissing(project, parameters, samples, remark);
+
+        Assert.Equal("素土", parameters.MaterialType);
+        Assert.Equal("≥94%", parameters.DesignRequirementText);
+        Assert.Equal("土基层", parameters.TestLocation);
+        Assert.Equal("300", samples[0].Thickness);
+        Assert.Equal("250", samples[0].Elevation);
     }
 }

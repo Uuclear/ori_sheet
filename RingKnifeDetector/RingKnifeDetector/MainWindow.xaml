@@ -10,6 +10,12 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip">
     <Window.Resources>
+        <Style x:Key="WrappedDataGridCell" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="4,2"/>
+        </Style>
         <Style x:Key="NavButton" TargetType="Button">
             <Setter Property="Width" Value="100"/>
             <Setter Property="Height" Value="30"/>
@@ -213,31 +219,33 @@
                             <TextBlock Grid.Row="1" Grid.Column="2" Text="单位地址：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="1" Grid.Column="3" x:Name="txtUnitAddress" Style="{StaticResource CellInput}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="监理单位：" Style="{StaticResource CellLabel}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" x:Name="lblSupervisionUnit" Text="监理单位：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="2" Grid.Column="1" x:Name="txtSupervisionUnit" Style="{StaticResource CellInput}"/>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="施工单位：" Style="{StaticResource CellLabel}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" x:Name="lblConstructionUnit" Text="施工单位：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="2" Grid.Column="3" x:Name="txtConstructionUnit" Style="{StaticResource CellInput}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="工程地址：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="3" Grid.Column="1" x:Name="txtProjectAddress" Style="{StaticResource CellInput}"/>
                             <TextBlock Grid.Row="3" Grid.Column="2" Text="委托日期：" Style="{StaticResource CellLabel}"/>
-                            <DatePicker Grid.Row="3" Grid.Column="3" x:Name="dpEntrustDate" Margin="2,2" FontSize="12"/>
+                            <views:ChineseDateField Grid.Row="3" Grid.Column="3" x:Name="fieldEntrustDate" Margin="2,2"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="工程部位：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="4" Grid.Column="1" x:Name="txtProjectSection" Style="{StaticResource CellInput}"/>
                             <TextBlock Grid.Row="4" Grid.Column="2" Text="报告日期：" Style="{StaticResource CellLabel}"/>
-                            <DatePicker Grid.Row="4" Grid.Column="3" x:Name="dpReportDate" Margin="2,2" FontSize="12"/>
+                            <views:ChineseDateField Grid.Row="4" Grid.Column="3" x:Name="fieldReportDate" Margin="2,2"/>
                         </Grid>
                     </GroupBox>
 
                     <!-- 检测参数 -->
-                    <GroupBox Header="检测参数" Margin="0,0,0,8" Padding="6">
+                    <GroupBox Header="检测参数" Margin="0,0,0,8" Padding="6,6,10,6">
                         <Grid x:Name="gridParams">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -249,13 +257,13 @@
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="样品名称：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="0" Grid.Column="1" x:Name="txtSampleName" Text="回填土" Style="{StaticResource CellInput}"/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="材料种类：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="0" Grid.Column="3" x:Name="txtMaterialType" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="材料种类：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Row="0" Grid.Column="4" x:Name="txtMaterialType" Style="{StaticResource CellInput}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="环刀规格：" Style="{StaticResource CellLabel}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblRingSpec" Text="环刀规格：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="1" Grid.Column="1" x:Name="txtRingSpec" Text="200cm³" Style="{StaticResource CellInput}"/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="夯实方式：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="txtCompactionMethod" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="夯实方式：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Row="1" Grid.Column="4" x:Name="txtCompactionMethod" Style="{StaticResource CellInput}"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="设计要求：" Style="{StaticResource CellLabel}"/>
                             <Grid Grid.Row="2" Grid.Column="1">
@@ -266,18 +274,26 @@
                                 <TextBlock Grid.Column="0" Text="≥" VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Margin="4,0,0,0"/>
                                 <TextBox Grid.Column="1" x:Name="txtDesignRequirement" Style="{StaticResource CellInput}"/>
                             </Grid>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="最大干密度/(g/cm³)：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="2" Grid.Column="3" x:Name="txtMaxDryDensity" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="最大干密度/(g/cm³)：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Row="2" Grid.Column="4" x:Name="txtMaxDryDensity" Style="{StaticResource CellInput}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="取样部位：" Style="{StaticResource CellLabel}"/>
                             <TextBox Grid.Row="3" Grid.Column="1" x:Name="txtTestLocation" Style="{StaticResource CellInput}"/>
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="最优含水率/%：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="3" Grid.Column="3" x:Name="txtOptimalMoisture" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="3" Text="最优含水率/%：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Row="3" Grid.Column="4" x:Name="txtOptimalMoisture" Style="{StaticResource CellInput}"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="检测依据：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="4" Grid.Column="1" x:Name="txtTestBasis" Text="JTG 3450-2019" Style="{StaticResource CellInput}"/>
-                            <TextBlock Grid.Row="4" Grid.Column="2" Text="判定依据：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="4" Grid.Column="3" x:Name="txtJudgeBasis" Text="JTG 3450-2019" Style="{StaticResource CellInput}"/>
+                            <Grid Grid.Row="4" Grid.Column="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="txtTestBasis" Text="JTG 3450-2019" Style="{StaticResource CellInput}"/>
+                                <ToggleButton Grid.Column="1" x:Name="tglFullBasisName" Content="全称" Margin="4,0,0,0"
+                                              Padding="8,2" Height="24" Click="TglFullBasisName_Changed"/>
+                            </Grid>
+                            <TextBlock Grid.Row="4" Grid.Column="3" Text="判定依据：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Row="4" Grid.Column="4" x:Name="txtJudgeBasis" Text="——" Style="{StaticResource CellInput}"/>
                         </Grid>
                     </GroupBox>
 
@@ -311,22 +327,7 @@
                     <!-- 检测结果 -->
                     <GroupBox Header="检测结果" Margin="0,0,0,8" Padding="6">
                         <StackPanel>
-                            <DataGrid x:Name="dgResults" AutoGenerateColumns="False" CanUserAddRows="False"
-                                      CanUserDeleteRows="False" GridLinesVisibility="All" HeadersVisibility="Column"
-                                      IsReadOnly="True">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="样品编号" Binding="{Binding SampleNo}" Width="150" MinWidth="130"/>
-                                    <DataGridTextColumn Header="取样点标高/(mm)" Binding="{Binding Elevation}" Width="100"/>
-                                    <DataGridTextColumn Header="取样点厚度/(mm)" Binding="{Binding Thickness}" Width="100"/>
-                                    <DataGridTextColumn Header="取样日期" Binding="{Binding SamplingDate}" Width="100"/>
-                                    <DataGridTextColumn Header="检测日期" Binding="{Binding TestDate}" Width="100"/>
-                                    <DataGridTextColumn Header="湿密度/(g/cm³)" Binding="{Binding AvgWetDensity}" Width="100"/>
-                                    <DataGridTextColumn Header="含水率/%" Binding="{Binding AvgMoisture}" Width="80"/>
-                                    <DataGridTextColumn Header="干密度/(g/cm³)" Binding="{Binding AvgDryDensity}" Width="100"/>
-                                    <DataGridTextColumn Header="压实系数" Binding="{Binding CompactionCoeff}" Width="80"/>
-                                    <DataGridTextColumn Header="结论" Binding="{Binding Conclusion}" Width="120"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+                            <views:ResultsTableControl x:Name="resultsTable"/>
                             <Grid Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -348,10 +349,31 @@
                         </StackPanel>
                     </GroupBox>
 
+                    <!-- 签章人员 -->
+                    <GroupBox Header="签章人员" Margin="0,0,0,8" Padding="6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="批准：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Column="1" x:Name="txtApprover" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Column="2" Text="审核：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Column="3" x:Name="txtReviewer" Style="{StaticResource CellInput}"/>
+                            <TextBlock Grid.Column="4" Text="主检：" Style="{StaticResource CellLabel}"/>
+                            <TextBox Grid.Column="5" x:Name="txtRecordInspector" Style="{StaticResource CellInput}"/>
+                        </Grid>
+                    </GroupBox>
+
                     <!-- 操作栏 -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                         <Button Content="计算" Style="{StaticResource ActionGreen}" Click="BtnCalculate_Click"/>
-                        <Button Content="导出 Word" Style="{StaticResource ActionBlue}" Click="BtnExportWord_Click"/>
+                        <Button Content="导出报告" Style="{StaticResource ActionBlue}" Click="BtnExportWord_Click"/>
+                        <Button Content="导出原始记录" Style="{StaticResource ActionBlue}" Click="BtnExportRecord_Click"/>
                         <Button Content="保存草稿" Style="{StaticResource ActionBlue}" Click="BtnSaveDraft_Click"/>
                         <Button Content="清空" Style="{StaticResource ActionRed}" Click="BtnClear_Click"/>
                     </StackPanel>

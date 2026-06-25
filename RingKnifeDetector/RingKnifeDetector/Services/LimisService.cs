@@ -417,6 +417,32 @@ namespace RingKnifeDetector.Services
         }
 
         /// <summary>
+        /// 获取见证送样委托单 HTML（orderRow.standBy3）。
+        /// </summary>
+        private async Task<string?> FetchTestingOrderHtmlAsync(
+            Dictionary<string, object> orderRow, string baseUrl)
+        {
+            if (!orderRow.TryGetValue("standBy3", out var pathObj))
+                return null;
+
+            var path = pathObj?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(path))
+                return null;
+
+            if (path.StartsWith("~/", StringComparison.Ordinal))
+                path = path[1..];
+            if (!path.StartsWith('/'))
+                path = "/" + path;
+
+            var client = await GetClientAsync(baseUrl);
+            var response = await client.GetAsync(path);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            return await response.Content.ReadAsStringAsync();
+        }
+
+        /// <summary>
         /// 格式化联系人信息
         /// </summary>
         private string FormatContact(object? person, object? phone)
@@ -554,7 +580,7 @@ namespace RingKnifeDetector.Services
             if (row.TryGetValue("sampleNo", out var sampleNoObj))
                 sampleNo = sampleNoObj?.ToString()?.Trim() ?? string.Empty;
 
-            foreach (var key in new[] { "sampleName", "SampleName", "sampleDesc", "manufacturer", "typeSpecification" })
+            foreach (var key in new[] { "sampleName", "SampleName", "sampleDesc", "productName", "specimenName", "manufacturer" })
             {
                 if (row.TryGetValue(key, out var value))
                 {
@@ -767,10 +793,11 @@ namespace RingKnifeDetector.Services
                 var sampleNo = string.Empty;
                 var sampleName = string.Empty;
                 var reportDateOverride = string.Empty;
+                Dictionary<string, object>? reportRow = null;
 
                 if (!string.IsNullOrEmpty(resolvedSampleId))
                 {
-                    var reportRow = await FetchReportInfoAsync(orderId, resolvedSampleId, resolvedTaskId, url);
+                    reportRow = await FetchReportInfoAsync(orderId, resolvedSampleId, resolvedTaskId, url);
                     if (reportRow != null)
                     {
                         if (reportRow.TryGetValue("testingReportCode", out var reportCodeObj))
@@ -801,9 +828,28 @@ namespace RingKnifeDetector.Services
                     project.ReportDate = reportDateOverride;
                 }
 
+                var witnessFields = LimisWitnessMapper.Map(project, row, taskRow, reportRow);
+                WitnessSamplingFields htmlFields = new();
+                var orderHtml = await FetchTestingOrderHtmlAsync(row, url);
+                if (!string.IsNullOrEmpty(orderHtml))
+                    htmlFields = LimisOrderHtmlParser.Parse(orderHtml);
+
+                if (TestNatureHelper.IsWitnessSampling(project.TestNature))
+                    LimisWitnessMapper.MergeHtml(witnessFields, htmlFields);
+
+                LimisWitnessMapper.ApplyToProject(project, witnessFields);
+                TextSanitizer.SanitizeProject(project);
+
                 var remark = PickRemark(row);
                 if (string.IsNullOrEmpty(remark) && taskRow != null)
                     remark = PickRemark(taskRow);
+
+                var isWitness = TestNatureHelper.IsWitnessSampling(project.TestNature);
+                var testBasisFromHtml = !string.IsNullOrWhiteSpace(htmlFields.TestBasis);
+                var sampleNameFromHtml = isWitness && !string.IsNullOrWhiteSpace(htmlFields.SampleName);
+                var resolvedSampleName = sampleNameFromHtml
+                    ? htmlFields.SampleName
+                    : (!string.IsNullOrWhiteSpace(witnessFields.SampleName) ? witnessFields.SampleName : sampleName);
 
                 return new LimisEntrustResponse
                 {
@@ -811,8 +857,13 @@ namespace RingKnifeDetector.Services
                     Message = "查询成功",
                     Project = project,
                     SampleNo = sampleNo,
-                    SampleName = sampleName,
-                    Remark = remark
+                    SampleName = resolvedSampleName,
+                    Remark = remark,
+                    TypeSpecification = witnessFields.TypeSpecification,
+                    TestBasis = htmlFields.TestBasis,
+                    IsWitnessSampling = isWitness,
+                    SampleNameFromHtml = sampleNameFromHtml,
+                    TestBasisFromHtml = testBasisFromHtml
                 };
             }
             catch (Exception ex)
@@ -920,6 +971,186 @@ namespace RingKnifeDetector.Services
             }
 
             return unique;
+        }
+
+        /// <summary>
+        /// 探测用：导出委托原始字段（order / task / report）。
+        /// </summary>
+        public async Task<string> DumpRawEntrustJsonAsync(
+            string entrustNo, string? baseUrl = null, string? username = null, string? password = null,
+            string? testingOrderIdOverride = null)
+        {
+            var loginResult = await EnsureLoginAsync(baseUrl, username, password);
+            if (!loginResult.Success)
+                return JsonSerializer.Serialize(new { error = loginResult.Message });
+
+            var (url, _, _) = ResolveCredentials(baseUrl, username, password);
+            var orderId = testingOrderIdOverride
+                ?? await ResolveTestingOrderIdAsync(entrustNo, null, url);
+            if (string.IsNullOrEmpty(orderId))
+                return JsonSerializer.Serialize(new { error = $"未找到委托: {entrustNo}" });
+
+            var row = await FetchTestingOrderBaseAsync(orderId, url);
+            var taskRows = await FetchTaskListAsync(entrustNo, url);
+            var taskRow = PickTaskRow(taskRows ?? new List<Dictionary<string, object>>(), null, null);
+
+            Dictionary<string, object>? reportRow = null;
+            if (taskRow != null
+                && taskRow.TryGetValue("sampleId", out var sampleIdObj)
+                && taskRow.TryGetValue("taskId", out var taskIdObj))
+            {
+                reportRow = await FetchReportInfoAsync(orderId, sampleIdObj?.ToString() ?? "", taskIdObj?.ToString(), url);
+            }
+
+            var project = row != null ? MapOrderRowToProject(row, entrustNo, "") : null;
+            var witness = project != null ? LimisWitnessMapper.Map(project, row, taskRow, reportRow) : null;
+            var jsonOnlyWitness = witness == null ? null : new WitnessSamplingFields
+            {
+                SupervisionWitness = witness.SupervisionWitness,
+                SampleSampling = witness.SampleSampling,
+                Contact = witness.Contact,
+                SampleName = witness.SampleName,
+                TypeSpecification = witness.TypeSpecification,
+                TestBasis = witness.TestBasis
+            };
+            WitnessSamplingFields? htmlWitness = null;
+            if (project != null && row != null && TestNatureHelper.IsWitnessSampling(project.TestNature))
+            {
+                var orderHtml = await FetchTestingOrderHtmlAsync(row, url);
+                if (!string.IsNullOrEmpty(orderHtml))
+                {
+                    htmlWitness = LimisOrderHtmlParser.Parse(orderHtml);
+                    if (witness != null)
+                        LimisWitnessMapper.MergeHtml(witness, htmlWitness);
+                }
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                entrustNo,
+                orderId,
+                testNature = project?.TestNature,
+                orderRow = row,
+                orderRowKeys = row?.Keys.OrderBy(k => k).ToList(),
+                witnessRelatedKeys = row?.Keys
+                    .Where(k => ContainsWitnessHint(k))
+                    .ToDictionary(k => k, k => row[k]),
+                taskRow,
+                taskRowKeys = taskRow?.Keys.OrderBy(k => k).ToList(),
+                reportRow,
+                reportRowKeys = reportRow?.Keys.OrderBy(k => k).ToList(),
+                standBy3 = row?.GetValueOrDefault("standBy3")?.ToString(),
+                jsonOnlyWitness,
+                htmlWitness,
+                mappedWitness = witness
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+
+        private static bool ContainsWitnessHint(string key)
+        {
+            var k = key.ToLowerInvariant();
+            return k.Contains("witness")
+                || k.Contains("sampling")
+                || k.Contains("sampler")
+                || k.Contains("sample")
+                || k.Contains("spec")
+                || k.Contains("basis")
+                || k.Contains("standard")
+                || k.Contains("standby")
+                || k.Contains("supervisor")
+                || k.Contains("construction")
+                || k.Contains("jl")
+                || k.Contains("sg")
+                || k.Contains("qy");
+        }
+
+        /// <summary>探测其他可能返回见证/样品字段的 API（内网调试用）。</summary>
+        public async Task<string> ProbeAlternativeApisAsync(
+            string entrustNo,
+            string? testingOrderIdOverride,
+            string? baseUrl = null,
+            string? username = null,
+            string? password = null)
+        {
+            var loginResult = await EnsureLoginAsync(baseUrl, username, password);
+            if (!loginResult.Success)
+                return JsonSerializer.Serialize(new { error = loginResult.Message });
+
+            var (url, _, _) = ResolveCredentials(baseUrl, username, password);
+            var orderId = testingOrderIdOverride
+                ?? await ResolveTestingOrderIdAsync(entrustNo, null, url);
+            if (string.IsNullOrEmpty(orderId))
+                return JsonSerializer.Serialize(new { error = $"未找到委托: {entrustNo}" });
+
+            var taskRows = await FetchTaskListAsync(entrustNo, url);
+            var taskRow = PickTaskRow(taskRows ?? new List<Dictionary<string, object>>(), null, null);
+            var sampleId = taskRow?.GetValueOrDefault("sampleId")?.ToString() ?? "";
+            var taskId = taskRow?.GetValueOrDefault("taskId")?.ToString() ?? "";
+
+            var methods = new (string path, Dictionary<string, string> payload)[]
+            {
+                (TestingOrdersPath, new() { ["method"] = "GetTestingOrderSampleList", ["testingOrderId"] = orderId }),
+                (TestingOrdersPath, new() { ["method"] = "GetTestingOrderSample", ["testingOrderId"] = orderId }),
+                (TestingOrdersPath, new() { ["method"] = "GetSampleById", ["testingOrderId"] = orderId, ["sampleId"] = sampleId }),
+                (TestingOrdersPath, new() { ["method"] = "GetTestingOrdersDetail", ["testingOrderId"] = orderId }),
+                (TestingOrdersPath, new() { ["method"] = "GetTestingOrderDetail", ["testingOrderId"] = orderId }),
+                (TestingOrdersPath, new() { ["method"] = "GetTestingOrdersById", ["testingOrderId"] = orderId }),
+                ("/AjaxRequest/Business/SampleManage.ashx", new() { ["method"] = "GetSampleList", ["page"] = "1", ["pageSize"] = "20", ["EntrustId"] = orderId }),
+                ("/AjaxRequest/Business/EntrustManage.ashx", new() { ["method"] = "GetEntrustList", ["page"] = "1", ["pageSize"] = "20", ["EntrustNo"] = entrustNo }),
+                ("/AjaxRequest/IntegratedQueryManage/IntegratedQuery.ashx", new()
+                {
+                    ["method"] = "GetIntegratedQueryInfo",
+                    ["type"] = "4",
+                    ["size"] = "10",
+                    ["page"] = "1",
+                    ["testingOrderNo"] = entrustNo,
+                    ["authType"] = "1",
+                    ["cha"] = "1"
+                }),
+            };
+
+            var results = new List<object>();
+            var client = await GetClientAsync(url);
+            foreach (var (path, payload) in methods)
+            {
+                if (payload.ContainsKey("sampleId") && string.IsNullOrEmpty(payload["sampleId"]))
+                {
+                    results.Add(new { path, method = payload["method"], skipped = "no sampleId" });
+                    continue;
+                }
+
+                try
+                {
+                    var response = await client.PostAsync(path, new FormUrlEncodedContent(payload));
+                    var text = await response.Content.ReadAsStringAsync();
+                    var preview = text.Length > 2000 ? text[..2000] + "…" : text;
+                    object? parsed = null;
+                    try { parsed = JsonSerializer.Deserialize<object>(text); } catch { /* raw text */ }
+
+                    results.Add(new
+                    {
+                        path,
+                        method = payload["method"],
+                        status = (int)response.StatusCode,
+                        length = text.Length,
+                        preview,
+                        parsed
+                    });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { path, method = payload["method"], error = ex.Message });
+                }
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                entrustNo,
+                orderId,
+                sampleId,
+                taskId,
+                apiProbes = results
+            }, new JsonSerializerOptions { WriteIndented = true });
         }
 
         /// <summary>

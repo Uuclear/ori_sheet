@@ -1,3 +1,4 @@
+using RingKnifeDetector.Helpers;
 using RingKnifeDetector.Models;
 
 namespace RingKnifeDetector.Services
@@ -7,7 +8,8 @@ namespace RingKnifeDetector.Services
     /// </summary>
     public class CalculationService
     {
-        private const int DecimalPlaces = 2;
+        private const int DensityDecimalPlaces = 2;
+        private const int MoistureDecimalPlaces = 1;
 
         /// <summary>
         /// 计算含水率
@@ -30,7 +32,7 @@ namespace RingKnifeDetector.Services
                 return null;
 
             var rate = (wetSoil - drySoil) / drySoil * 100;
-            return Math.Round(rate, DecimalPlaces, MidpointRounding.AwayFromZero);
+            return Math.Round(rate, MoistureDecimalPlaces, MidpointRounding.AwayFromZero);
         }
 
         /// <summary>
@@ -60,7 +62,7 @@ namespace RingKnifeDetector.Services
                 moistureRates.Add(CalculateMoisture(box.BoxMass, box.WetSampleMass, box.DrySampleMass));
             }
 
-            var avgMoisture = CalculateAverage(moistureRates);
+            var avgMoisture = CalculateAverage(moistureRates, MoistureDecimalPlaces);
 
             decimal? dryDensity = null;
             if (wetDensity != null && avgMoisture != null)
@@ -68,14 +70,14 @@ namespace RingKnifeDetector.Services
                 var factor = 1 + avgMoisture.Value / 100;
                 if (factor > 0)
                 {
-                    dryDensity = Math.Round(wetDensity.Value / factor, DecimalPlaces, MidpointRounding.AwayFromZero);
+                    dryDensity = CompactionFormat.RoundDensity(wetDensity.Value / factor);
                 }
             }
 
             return new RingPointResult
             {
-                WetMass = wetMass != null ? Math.Round(wetMass.Value, DecimalPlaces, MidpointRounding.AwayFromZero) : null,
-                WetDensity = wetDensity != null ? Math.Round(wetDensity.Value, DecimalPlaces, MidpointRounding.AwayFromZero) : null,
+                WetMass = wetMass != null ? CompactionFormat.RoundDensity(wetMass.Value) : null,
+                WetDensity = wetDensity != null ? CompactionFormat.RoundDensity(wetDensity.Value) : null,
                 MoistureRates = moistureRates,
                 AvgMoisture = avgMoisture,
                 DryDensity = dryDensity
@@ -92,6 +94,7 @@ namespace RingKnifeDetector.Services
         {
             var rings = GetRingsForSample(sample);
             var ringResults = rings.Select(CalculateRing).ToList();
+            ApplyRingCompaction(ringResults, @params.MaxDryDensity);
 
             var wetDensities = ringResults.Select(r => r.WetDensity).ToList();
             var dryDensities = ringResults.Select(r => r.DryDensity).ToList();
@@ -103,9 +106,9 @@ namespace RingKnifeDetector.Services
                 allMoistureRates.AddRange(r.MoistureRates);
             }
 
-            var avgWetDensity = CalculateAverage(wetDensities);
-            var avgMoisture = CalculateAverage(moistureAvgs);
-            var avgDryDensity = CalculateAverage(dryDensities);
+            var avgWetDensity = CalculateAverage(wetDensities, DensityDecimalPlaces);
+            var avgMoisture = CalculateAverage(moistureAvgs, MoistureDecimalPlaces);
+            var avgDryDensity = CalculateAverage(dryDensities, DensityDecimalPlaces);
 
             var first = ringResults.FirstOrDefault() ?? new RingPointResult();
 
@@ -116,33 +119,40 @@ namespace RingKnifeDetector.Services
             if (avgDryDensity != null && @params.MaxDryDensity != null && @params.MaxDryDensity > 0)
             {
                 var coeff = avgDryDensity.Value / @params.MaxDryDensity.Value;
-                compactionCoeff = Math.Round(coeff, DecimalPlaces, MidpointRounding.AwayFromZero);
-                compactionPercent = Math.Round(coeff * 100, DecimalPlaces, MidpointRounding.AwayFromZero);
+                compactionCoeff = CompactionFormat.RoundCoeff(coeff);
+                compactionPercent = CompactionFormat.RoundPercent(coeff * 100);
             }
 
-            if (@params.DesignRequirement != null && compactionCoeff != null)
+            var isGroup3 = @params.RecordTemplate == "group3" && ringResults.Count >= 3;
+            if (@params.DesignRequirement != null)
             {
-                decimal? target;
-                decimal? actual;
+                if (isGroup3)
+                {
+                    foreach (var ring in ringResults)
+                    {
+                        var actual = @params.ResultType == "compaction_percent"
+                            ? ring.CompactionPercent
+                            : ring.CompactionCoeff;
+                        ring.Conclusion = JudgeDesignCompliance(actual, @params.DesignRequirement);
+                    }
 
-                if (@params.ResultType == "compaction_percent")
-                {
-                    target = @params.DesignRequirement;
-                    actual = compactionPercent;
+                    var ringConclusions = ringResults
+                        .Select(r => r.Conclusion)
+                        .Where(c => !string.IsNullOrEmpty(c))
+                        .ToList();
+                    if (ringConclusions.Count > 0)
+                    {
+                        conclusion = ringConclusions.All(c => c == "符合设计要求")
+                            ? "符合设计要求"
+                            : "不符合设计要求";
+                    }
                 }
-                else
+                else if (compactionCoeff != null)
                 {
-                    target = @params.DesignRequirement;
-                    actual = compactionCoeff;
-                }
-
-                if (actual != null && actual >= target)
-                {
-                    conclusion = "符合设计要求";
-                }
-                else
-                {
-                    conclusion = "不符合设计要求";
+                    var actual = @params.ResultType == "compaction_percent"
+                        ? compactionPercent
+                        : compactionCoeff;
+                    conclusion = JudgeDesignCompliance(actual, @params.DesignRequirement);
                 }
             }
 
@@ -175,14 +185,18 @@ namespace RingKnifeDetector.Services
         public CalcResponse CalculateAll(CalcRequest request)
         {
             var results = request.Samples.Select(s => CalculatePoint(s, request.Params)).ToList();
-            var conclusions = results.Where(r => !string.IsNullOrEmpty(r.Conclusion)).Select(r => r.Conclusion).ToList();
+            var isGroup3 = request.Params.RecordTemplate == "group3";
+            var conclusions = isGroup3
+                ? results.SelectMany(r => r.Rings).Select(ring => ring.Conclusion).Where(c => !string.IsNullOrEmpty(c))
+                : results.Where(r => !string.IsNullOrEmpty(r.Conclusion)).Select(r => r.Conclusion);
+            var conclusionList = conclusions.ToList();
 
             string overall;
-            if (!conclusions.Any())
+            if (!conclusionList.Any())
             {
                 overall = string.Empty;
             }
-            else if (conclusions.All(c => c == "符合设计要求"))
+            else if (conclusionList.All(c => c == "符合设计要求"))
             {
                 if (request.Params.ResultType == "compaction_percent")
                 {
@@ -215,6 +229,22 @@ namespace RingKnifeDetector.Services
         /// <summary>
         /// 获取样品的环刀测量列表
         /// </summary>
+        private static void ApplyRingCompaction(IEnumerable<RingPointResult> ringResults, decimal? maxDryDensity)
+        {
+            if (maxDryDensity is not > 0)
+                return;
+
+            foreach (var ring in ringResults)
+            {
+                if (ring.DryDensity == null)
+                    continue;
+
+                var coeff = ring.DryDensity.Value / maxDryDensity.Value;
+                ring.CompactionCoeff = CompactionFormat.RoundCoeff(coeff);
+                ring.CompactionPercent = CompactionFormat.RoundPercent(coeff * 100);
+            }
+        }
+
         private List<RingMeasurement> GetRingsForSample(RingKnifeSample sample)
         {
             if (sample.Rings.Any())
@@ -237,7 +267,7 @@ namespace RingKnifeDetector.Services
         /// <summary>
         /// 计算平均值
         /// </summary>
-        private decimal? CalculateAverage(List<decimal?> values)
+        private decimal? CalculateAverage(List<decimal?> values, int decimalPlaces)
         {
             var validValues = values.Where(v => v != null).ToList();
             if (!validValues.Any())
@@ -245,7 +275,15 @@ namespace RingKnifeDetector.Services
 
             var sum = validValues.Sum(v => v!.Value);
             var avg = sum / validValues.Count;
-            return Math.Round(avg, DecimalPlaces, MidpointRounding.AwayFromZero);
+            return Math.Round(avg, decimalPlaces, MidpointRounding.AwayFromZero);
+        }
+
+        private static string JudgeDesignCompliance(decimal? actual, decimal? target)
+        {
+            if (!target.HasValue || !actual.HasValue)
+                return string.Empty;
+
+            return actual >= target ? "符合设计要求" : "不符合设计要求";
         }
     }
 }

@@ -16,6 +16,13 @@ namespace RingKnifeDetector.Services
         private const string DryDensityUnit = @"g\s*/\s*cm\s*[³3³]?";
         private const string UnitFieldBoundary = @"(?=\s*[;；]?\s*(?:监理单位|见证单位|建设单位|设计单位|施工单位)|\n|$)";
         private const string ChineseMaterialRun = @"[\p{IsCJKUnifiedIdeographs}（）()]+";
+        private const string LocationFieldBoundary =
+            @"(?=\n|标高|高程|取[样祥]层厚度|填筑厚度|取样点厚度|取样时间|取样标高|委托组数|检测组数|最大干密度|最佳|最优|设计|$)";
+        private const string GluedAfterDigitLabels =
+            "最佳含水率|最优含水率|最佳含水量|最优含水量|材料种类|材料种美|品种|设计要求|取样部位|取样层厚度|取祥层厚度|填筑厚度|取样时间|取样标高|最大干密度|毛体积密度|压实度|压实系数|委托组数|检测组数|固体体积率";
+        private const string GluedAfterCjkLabels =
+            "材料种类|材料种美|品种|设计要求|取样部位|最佳含水率|最优含水率|最大干密度";
+        private const string LabelSep = @"\s*[:：]?\s*";
 
         public static RemarkParseResult FillMissing(
             ProjectInfo project,
@@ -31,21 +38,21 @@ namespace RingKnifeDetector.Services
 
             if (IsMissingValue(project.SupervisionUnit))
             {
-                var v = MatchField(ctx, $@"监理单位\s*[:：]\s*(.+?){UnitFieldBoundary}", "project.supervisionUnit", "监理单位")
-                        ?? MatchField(ctx, $@"见证单位\s*[:：]\s*(.+?){UnitFieldBoundary}", "project.supervisionUnit", "监理单位");
+                var v = MatchField(ctx, $@"监理单位{LabelSep}(.+?){UnitFieldBoundary}", "project.supervisionUnit", "监理单位")
+                        ?? MatchField(ctx, $@"见证单位{LabelSep}(.+?){UnitFieldBoundary}", "project.supervisionUnit", "监理单位");
                 if (!string.IsNullOrEmpty(v)) project.SupervisionUnit = v;
             }
 
             if (IsMissingValue(project.ConstructionUnit))
             {
-                var v = MatchField(ctx, $@"施工单位\s*[:：]\s*(.+?){UnitFieldBoundary}", "project.constructionUnit", "施工单位");
+                var v = MatchField(ctx, $@"施工单位{LabelSep}(.+?){UnitFieldBoundary}", "project.constructionUnit", "施工单位");
                 if (!string.IsNullOrEmpty(v)) project.ConstructionUnit = v;
             }
 
             if (IsMissingValue(project.ProjectSection))
             {
-                var v = MatchField(ctx, @"工程部位\s*[:：]\s*(.+?)(?=\n|[;；]|取样点|取样部位|桩号|$)", "project.projectSection", "工程部位")
-                        ?? MatchField(ctx, @"桩号\s*[:：]\s*(.+?)(?=\n|最大干密度|点桩号|检测点桩号|$)", "project.projectSection", "桩号");
+                var v = MatchField(ctx, $@"工程部位{LabelSep}(.+?)(?=\n|[;；]|取样点|取样部位|桩号|$)", "project.projectSection", "工程部位")
+                        ?? MatchField(ctx, $@"桩号{LabelSep}(.+?)(?=\n|最大干密度|点桩号|检测点桩号|$)", "project.projectSection", "桩号");
                 if (!string.IsNullOrEmpty(v)) project.ProjectSection = v;
             }
 
@@ -61,11 +68,11 @@ namespace RingKnifeDetector.Services
 
             if (IsMissingValue(parameters.TestLocation))
             {
-                var v = MatchField(ctx, @"取样部位\s*[:：]\s*(.+?)(?=\n|标高|高程|$)", "params.testLocation", "取样部位")
-                        ?? MatchField(ctx, @"检测点桩号\s*[:：]\s*(.+?)(?=\n|最佳|最大|设计|最优|$)", "params.testLocation", "检测点桩号")
-                        ?? MatchField(ctx, @"取样点\s*[:：]\s*(.+?)(?=\n|标高|高程|$)", "params.testLocation", "取样点")
-                        ?? MatchField(ctx, @"取样点\s+(.+?)(?=\n|标高|高程|$)", "params.testLocation", "取样点")
-                        ?? MatchField(ctx, @"点桩号\s*[:：]\s*(.+?)(?=\n|设计要求|最佳|最大|$)", "params.testLocation", "点桩号");
+                var v = MatchField(ctx, $@"取样部位{LabelSep}(.+?){LocationFieldBoundary}", "params.testLocation", "取样部位")
+                        ?? MatchField(ctx, $@"检测点桩号{LabelSep}(.+?)(?=\n|最佳|最大|设计|最优|$)", "params.testLocation", "检测点桩号")
+                        ?? MatchField(ctx, $@"取样点{LabelSep}(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
+                        ?? MatchField(ctx, $@"取样点\s+(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
+                        ?? MatchField(ctx, $@"点桩号{LabelSep}(.+?)(?=\n|设计要求|最佳|最大|$)", "params.testLocation", "点桩号");
                 if (!string.IsNullOrEmpty(v)) parameters.TestLocation = v;
             }
 
@@ -93,7 +100,7 @@ namespace RingKnifeDetector.Services
                 var sample = samples[0];
                 if (string.IsNullOrWhiteSpace(sample.Elevation))
                 {
-                    var m = Regex.Match(text, @"(?:标高|高程)\s*[:：]?\s*([-\d]+(?:\.\d+)?)\s*(?:mm|m)?", RegexOptions.IgnoreCase);
+                    var m = Regex.Match(text, @"(?:标高|高程|取样标高)\s*[:：]?\s*([-\d]+(?:\.\d+)?)\s*(?:mm|m)?", RegexOptions.IgnoreCase);
                     if (m.Success)
                     {
                         sample.Elevation = m.Groups[1].Value;
@@ -105,7 +112,7 @@ namespace RingKnifeDetector.Services
                 {
                     var m = Regex.Match(
                         text,
-                        @"(?:取样点厚度|填筑厚度|厚度)\s*[:：]?\s*(\d+)\s*(mm|cm|m)?",
+                        @"(?:取样点厚度|取样层厚度|取祥层厚度|填筑厚度|厚度)\s*[:：]?\s*(\d+)\s*(mm|cm|m)?",
                         RegexOptions.IgnoreCase);
                     if (m.Success)
                     {
@@ -117,7 +124,24 @@ namespace RingKnifeDetector.Services
 
             TextSanitizer.SanitizeProject(project);
             TextSanitizer.SanitizeParams(parameters);
+            ApplyUnfilledRemarkFieldDefaults(result, parameters);
             return result;
+        }
+
+        private static void ApplyUnfilledRemarkFieldDefaults(RemarkParseResult result, RecordParams parameters)
+        {
+            if (!result.ExtractedFieldKeys.Contains("params.compactionMethod")
+                && string.IsNullOrWhiteSpace(parameters.CompactionMethod))
+            {
+                parameters.CompactionMethod = ReportDefaults.MissingFieldPlaceholder;
+            }
+
+            if (!result.ExtractedFieldKeys.Contains("params.judgeBasis")
+                && (string.IsNullOrWhiteSpace(parameters.JudgeBasis)
+                    || parameters.JudgeBasis == "JTG 3450-2019"))
+            {
+                parameters.JudgeBasis = ReportDefaults.MissingFieldPlaceholder;
+            }
         }
 
         public static RemarkParseResult AnalyzeHighlights(string? remark)
@@ -141,7 +165,9 @@ namespace RingKnifeDetector.Services
         {
             var percentPatterns = new[]
             {
-                $@"设计要求\s*[:：]\s*压实度\s*({CompareSymbol}\s*\d+(?:\.\d+)?{OptionalPercentSuffix})",
+                $@"设计要求{LabelSep}压实度\s*[（(]环刀[）)]\s*(?:{CompareSymbol})?\s*(\d+(?:\.\d+)?)\s*{OptionalPercentSuffix}",
+                $@"设计要求{LabelSep}压实度\s*[（(][^）)]*[）)]\s*(?:{CompareSymbol})?\s*(\d+(?:\.\d+)?)\s*{OptionalPercentSuffix}",
+                $@"设计要求{LabelSep}压实度\s*({CompareSymbol}\s*\d+(?:\.\d+)?{OptionalPercentSuffix})",
                 $@"压实度\s*({CompareSymbol}\s*\d+(?:\.\d+)?{OptionalPercentSuffix})",
             };
 
@@ -150,21 +176,19 @@ namespace RingKnifeDetector.Services
                 var m = Regex.Match(ctx.Text, pattern, RegexOptions.IgnoreCase);
                 if (!m.Success) continue;
 
-                var numMatch = Regex.Match(m.Groups[1].Value, @"\d+(?:\.\d+)?");
-                if (!numMatch.Success || !decimal.TryParse(numMatch.Value, out var percentValue))
+                if (!TryParseCompactionPercentToken(m.Groups[1].Value, m.Value, out var percentValue, out var displayToken))
                     continue;
 
                 parameters.DesignRequirement = percentValue;
                 parameters.ResultType = "compaction_percent";
-                var percentGroup = m.Groups[1].Value.Contains('%') ? "%" : string.Empty;
-                parameters.DesignRequirementText = BuildDesignRequirementText(numMatch.Value, percentGroup, isPercent: true);
+                parameters.DesignRequirementText = displayToken;
                 ctx.RecordGroup(m.Groups[1], "params.designRequirement", "设计要求/压实度");
                 return;
             }
 
             var coeffMatch = Regex.Match(
                 ctx.Text,
-                $@"(?:设计要求\s*[:：]\s*)?压实系数\s*({CompareSymbol}\s*\d+(?:\.\d+)?)",
+                $@"(?:设计要求{LabelSep})?压实系数\s*({CompareSymbol}\s*\d+(?:\.\d+)?)",
                 RegexOptions.IgnoreCase);
             if (!coeffMatch.Success)
             {
@@ -209,7 +233,7 @@ namespace RingKnifeDetector.Services
         {
             var directPatterns = new[]
             {
-                $@"设计要求\s*[:：]\s*固体体积率\s*({CompareSymbol}\s*\d+(?:\.\d+)?)",
+                $@"设计要求{LabelSep}固体体积率\s*({CompareSymbol}\s*\d+(?:\.\d+)?)",
                 $@"固体体积率\s*({CompareSymbol}\s*\d+(?:\.\d+)?)",
             };
 
@@ -225,9 +249,9 @@ namespace RingKnifeDetector.Services
 
             var wordPatterns = new[]
             {
-                @"设计要求\s*[:：]\s*固体体积率\s*(?:不小于|不低于|不少于|大于等于)\s*(\d+(?:\.\d+)?)",
+                $@"设计要求{LabelSep}固体体积率\s*(?:不小于|不低于|不少于|大于等于)\s*(\d+(?:\.\d+)?)",
                 @"固体体积率\s*(?:不小于|不低于|不少于|大于等于)\s*(\d+(?:\.\d+)?)",
-                @"设计要求\s*[:：]\s*.+?(?:不小于|不低于|不少于|大于等于)\s*(\d+(?:\.\d+)?)",
+                $@"设计要求{LabelSep}.+?(?:不小于|不低于|不少于|大于等于)\s*(\d+(?:\.\d+)?)",
             };
 
             foreach (var pattern in wordPatterns)
@@ -281,6 +305,25 @@ namespace RingKnifeDetector.Services
             };
         }
 
+        private static bool TryParseCompactionPercentToken(string token, string fullMatch, out decimal value, out string display)
+        {
+            value = 0;
+            display = string.Empty;
+            var numMatch = Regex.Match(token, @"\d+(?:\.\d+)?");
+            if (!numMatch.Success || !decimal.TryParse(numMatch.Value, out value))
+                return false;
+
+            if (value is > 100 and < 1000)
+                value = value % 100;
+
+            var hasPercent = token.Contains('%') || fullMatch.Contains('%');
+            display = hasPercent ? $"≥{TrimDecimal(value)}%" : $"≥{TrimDecimal(value)}";
+            return true;
+        }
+
+        private static string TrimDecimal(decimal value) =>
+            value.ToString(value % 1 == 0 ? "0" : "0.####################");
+
         private static string BuildDesignRequirementText(string number, string percentGroup, bool isPercent)
         {
             var hasPercent = !string.IsNullOrEmpty(percentGroup) && percentGroup.Contains('%');
@@ -295,7 +338,7 @@ namespace RingKnifeDetector.Services
         {
             var m = Regex.Match(
                 ctx.Text,
-                @"(?:品种|材料种类)\s*[:：]\s*(.+?)(?=\n|[;；]|委托组数|检测组数|$)",
+                $@"(?:品种|材料种类|材料种美){LabelSep}(.+?)(?=\n|[;；]|委托组数|检测组数|设计要求|取样|$)",
                 RegexOptions.Singleline | RegexOptions.IgnoreCase);
             if (!m.Success) return null;
 
@@ -449,8 +492,22 @@ namespace RingKnifeDetector.Services
             return value;
         }
 
-        private static string NormalizeRemarkText(string remark) =>
-            remark.Replace("\r\n", "\n").Trim().Replace('％', '%');
+        private static string NormalizeRemarkText(string remark)
+        {
+            var text = remark.Replace("\r\n", "\n").Trim().Replace('％', '%');
+            text = InsertMissingLabelSpaces(text);
+            text = Regex.Replace(text, $@"(?<=[0-9%³3)])(?=(?:{GluedAfterDigitLabels}))", " ");
+            text = Regex.Replace(text, $@"(?<=[\u4e00-\u9fff])(?=(?:{GluedAfterCjkLabels}))", " ");
+            text = Regex.Replace(text, $@"(?<={DryDensityUnit})(?={MoistureLabel})", " ", RegexOptions.IgnoreCase);
+            return text;
+        }
+
+        private static string InsertMissingLabelSpaces(string text) =>
+            Regex.Replace(
+                text,
+                @"(?<![\u4e00-\u9fff])(监理单位|见证单位|施工单位|工程部位|取样部位|材料种类|材料种美|品种|设计要求|取样时间|取样标高|检测点桩号|点桩号|桩号)(?=[^\s:：;；\n])",
+                "$1 ",
+                RegexOptions.IgnoreCase);
 
         private sealed class ParseContext
         {

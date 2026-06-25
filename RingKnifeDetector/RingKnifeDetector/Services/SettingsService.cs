@@ -46,12 +46,24 @@ namespace RingKnifeDetector.Services
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 };
 
-                return JsonSerializer.Deserialize<AppSettings>(json, options) ?? new AppSettings();
+                var settings = JsonSerializer.Deserialize<AppSettings>(json, options) ?? new AppSettings();
+                return EnsureReportRemarksTemplate(settings);
             }
             catch
             {
                 return new AppSettings();
             }
+        }
+
+        private AppSettings EnsureReportRemarksTemplate(AppSettings settings)
+        {
+            if (settings.ReportRemarksTemplateVersion >= ReportDefaults.ReportRemarksTemplateVersion)
+                return settings;
+
+            settings.DefaultReportRemarks = ReportDefaults.DefaultReportRemarks;
+            settings.ReportRemarksTemplateVersion = ReportDefaults.ReportRemarksTemplateVersion;
+            SaveSettings(settings);
+            return settings;
         }
 
         /// <summary>

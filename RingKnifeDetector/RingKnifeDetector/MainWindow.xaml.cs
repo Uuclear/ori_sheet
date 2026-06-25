@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 using RingKnifeDetector.Helpers;
+using RingKnifeDetector.Views;
 using RingKnifeDetector.Models;
 using RingKnifeDetector.Services;
 
@@ -16,6 +17,7 @@ namespace RingKnifeDetector
         private readonly CalculationService _calculationService;
         private readonly LimisService _limisService;
         private readonly WordExportService _wordExportService;
+        private readonly RecordWordExportService _recordWordExportService;
         private readonly DraftService _draftService;
         private readonly SettingsService _settingsService;
 
@@ -40,6 +42,7 @@ namespace RingKnifeDetector
             _calculationService = new CalculationService();
             _limisService = new LimisService();
             _wordExportService = new WordExportService();
+            _recordWordExportService = new RecordWordExportService();
             _draftService = new DraftService();
             _settingsService = new SettingsService();
 
@@ -67,26 +70,28 @@ namespace RingKnifeDetector
             _fieldTracker.AttachIndicatorToGridCell(txtSupervisionUnit, "project.supervisionUnit", gridProjectInfo);
             _fieldTracker.AttachIndicatorToGridCell(txtConstructionUnit, "project.constructionUnit", gridProjectInfo);
             _fieldTracker.AttachIndicatorToGridCell(txtProjectAddress, "project.projectAddress", gridProjectInfo);
-            _fieldTracker.AttachIndicatorToDatePicker(dpEntrustDate, "project.entrustDate", gridProjectInfo);
+            _fieldTracker.AttachIndicatorToGridCell(fieldEntrustDate, "project.entrustDate", gridProjectInfo, fieldEntrustDate);
             _fieldTracker.AttachIndicatorToGridCell(txtProjectSection, "project.projectSection", gridProjectInfo);
-            _fieldTracker.AttachIndicatorToDatePicker(dpReportDate, "project.reportDate", gridProjectInfo);
+            _fieldTracker.AttachIndicatorToGridCell(fieldReportDate, "project.reportDate", gridProjectInfo, fieldReportDate);
 
-            _fieldTracker.AttachIndicatorToGridCell(txtSampleName, "params.sampleName", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtMaterialType, "params.materialType", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtRingSpec, "params.ringSpec", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtCompactionMethod, "params.compactionMethod", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtDesignRequirement, "params.designRequirement", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtMaxDryDensity, "params.maxDryDensity", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtTestLocation, "params.testLocation", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtOptimalMoisture, "params.optimalMoisture", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtTestBasis, "params.testBasis", gridParams);
-            _fieldTracker.AttachIndicatorToGridCell(txtJudgeBasis, "params.judgeBasis", gridParams);
+            _fieldTracker.AttachSideIndicator(txtSampleName, "params.sampleName", gridParams, 2, txtSampleName);
+            _fieldTracker.AttachSideIndicator(txtMaterialType, "params.materialType", gridParams, 5, txtMaterialType);
+            _fieldTracker.AttachSideIndicator(txtRingSpec, "params.ringSpec", gridParams, 2, txtRingSpec);
+            _fieldTracker.AttachSideIndicator(txtCompactionMethod, "params.compactionMethod", gridParams, 5, txtCompactionMethod);
+            _fieldTracker.AttachSideIndicator(
+                (FrameworkElement)txtDesignRequirement.Parent!, "params.designRequirement", gridParams, 2, txtDesignRequirement);
+            _fieldTracker.AttachSideIndicator(txtMaxDryDensity, "params.maxDryDensity", gridParams, 5, txtMaxDryDensity);
+            _fieldTracker.AttachSideIndicator(txtTestLocation, "params.testLocation", gridParams, 2, txtTestLocation);
+            _fieldTracker.AttachSideIndicator(txtOptimalMoisture, "params.optimalMoisture", gridParams, 5, txtOptimalMoisture);
+            _fieldTracker.AttachSideIndicator(
+                (FrameworkElement)txtTestBasis.Parent!, "params.testBasis", gridParams, 2, txtTestBasis);
+            _fieldTracker.AttachSideIndicator(txtJudgeBasis, "params.judgeBasis", gridParams, 5, txtJudgeBasis);
         }
 
         private void OnTestRangeEndChanged(string endDate)
         {
-            _currentProject.ReportDate = endDate;
-            SetDatePicker(dpReportDate, endDate);
+            _currentProject.ReportDate = DateHelper.Normalize(endDate);
+            fieldReportDate.SetDate(_currentProject.ReportDate);
         }
 
         private int GetRingsPerBlock() =>
@@ -94,13 +99,22 @@ namespace RingKnifeDetector
 
         private void RefreshRecordTable()
         {
-            var globalSampling = _currentSamples.FirstOrDefault()?.SamplingDate ?? DateTime.Now.ToString("yyyy-MM-dd");
-            var globalTest = _currentSamples.FirstOrDefault()?.TestDate ?? DateTime.Now.ToString("yyyy-MM-dd");
+            var globalSampling = _currentSamples.FirstOrDefault()?.SamplingDate ?? DateHelper.FormatOrToday(DateTime.Today);
+            var globalTest = DateHelper.EnsureRangeFormat(_currentSamples.FirstOrDefault()?.TestDate)
+                ?? DateHelper.FormatRange(DateTime.Today, DateTime.Today);
             recordTable.Configure(
                 _currentSamples, _currentParams, _currentResults,
                 GetRingsPerBlock(),
                 rbCompactionPercent.IsChecked == true ? "compaction_percent" : "compaction_coeff",
                 globalSampling, globalTest);
+            RefreshResultsGrid();
+        }
+
+        private void RefreshResultsGrid()
+        {
+            _currentParams.RecordTemplate = GetRingsPerBlock() == 3 ? "group3" : "group2";
+            _currentParams.ResultType = rbCompactionPercent.IsChecked == true ? "compaction_percent" : "compaction_coeff";
+            resultsTable.Configure(_currentResults, _currentParams);
         }
 
         private void InitializeDefaultValues()
@@ -108,12 +122,14 @@ namespace RingKnifeDetector
             _currentParams.MaxDryDensity = 1.92m;
             _currentParams.DesignRequirement = 0.93m;
             _currentParams.SoilType = "土";
-            _currentParams.CompactionMethod = "重型击实";
+            _currentParams.CompactionMethod = ReportDefaults.MissingFieldPlaceholder;
+            _currentParams.JudgeBasis = ReportDefaults.MissingFieldPlaceholder;
             _currentParams.RingSpec = "200cm³";
             _currentParams.SampleName = "回填土";
             _currentParams.RecordTemplate = "group2";
 
             AddNewSample();
+            FillParamsForm();
             RefreshRecordTable();
         }
 
@@ -123,8 +139,8 @@ namespace RingKnifeDetector
             var sample = new RingKnifeSample
             {
                 SampleNo = sampleNo,
-                SamplingDate = DateTime.Now.ToString("yyyy-MM-dd"),
-                TestDate = DateTime.Now.ToString("yyyy-MM-dd"),
+                SamplingDate = DateHelper.FormatOrToday(DateTime.Today),
+                TestDate = DateHelper.FormatRange(DateTime.Today, DateTime.Today),
                 RingVolume = 200
             };
             for (int i = 0; i < rings; i++)
@@ -143,7 +159,44 @@ namespace RingKnifeDetector
             var prefix = GetSampleNoPrefix();
             var seq = _currentSamples.Count + 1;
             var sampleNo = string.IsNullOrEmpty(prefix) ? seq.ToString() : $"{prefix}-{seq:D2}";
-            _currentSamples.Add(CreateSample(sampleNo));
+            var sample = CreateSample(sampleNo);
+            if (_currentSamples.Count > 0)
+            {
+                var first = _currentSamples[0];
+                sample.SamplingDate = first.SamplingDate;
+                sample.TestDate = first.TestDate;
+                sample.Thickness = first.Thickness;
+            }
+            _currentSamples.Add(sample);
+        }
+
+        private static void SyncSampleDatesFromFirst(List<RingKnifeSample> samples)
+        {
+            if (samples.Count <= 1) return;
+            var first = samples[0];
+            var sampling = DateHelper.Normalize(first.SamplingDate);
+            var test = DateHelper.EnsureRangeFormat(first.TestDate) ?? first.TestDate;
+            var thickness = first.Thickness;
+            foreach (var sample in samples.Skip(1))
+            {
+                sample.SamplingDate = sampling;
+                sample.TestDate = test;
+                sample.Thickness = thickness;
+            }
+        }
+
+        private void SyncResultSharedFieldsFromFirstSample()
+        {
+            if (_currentResults.Count == 0 || _currentSamples.Count == 0) return;
+            var sampling = DateHelper.Normalize(_currentSamples[0].SamplingDate);
+            var test = DateHelper.EnsureRangeFormat(_currentSamples[0].TestDate) ?? _currentSamples[0].TestDate;
+            var thickness = _currentSamples[0].Thickness;
+            foreach (var result in _currentResults)
+            {
+                result.SamplingDate = sampling;
+                result.TestDate = test;
+                result.Thickness = thickness;
+            }
         }
 
         private string GetSampleNoPrefix()
@@ -176,15 +229,48 @@ namespace RingKnifeDetector
                 txtReportRemarks.Text = settings.DefaultReportRemarks;
             else
                 txtReportRemarks.Text = ReportDefaults.DefaultReportRemarks;
+            txtApprover.Text = "";
+            txtReviewer.Text = "";
+            txtRecordInspector.Text = "";
+            ApplyDefaultSignatureFields();
+
+            ApplyDefaultSignatureFields(settings);
         }
 
-        private static void SetDatePicker(DatePicker picker, string? text)
+        private void ApplyDefaultSignatureFields(AppSettings? settings = null)
         {
-            picker.SelectedDate = DateHelper.TryParse(text) ?? null;
+            settings ??= _settingsService.LoadSettings();
+            if (string.IsNullOrWhiteSpace(txtApprover.Text))
+                txtApprover.Text = settings.DefaultApprover;
+            if (string.IsNullOrWhiteSpace(txtReviewer.Text))
+                txtReviewer.Text = settings.DefaultReviewer;
+            if (string.IsNullOrWhiteSpace(txtRecordInspector.Text))
+                txtRecordInspector.Text = GetInspectorName(settings);
         }
 
-        private static string GetDatePickerText(DatePicker picker) =>
-            DateHelper.Format(picker.SelectedDate);
+        private void PersistSignatureDefaults()
+        {
+            var settings = _settingsService.LoadSettings();
+            settings.DefaultApprover = txtApprover.Text.Trim();
+            settings.DefaultReviewer = txtReviewer.Text.Trim();
+            _settingsService.SaveSettings(settings);
+        }
+
+        private static void SetDateField(ChineseDateField field, string? text) => field.SetDate(text);
+
+        private static string GetDateFieldValue(ChineseDateField field) => field.NormalizedValue;
+
+        private void ApplySignatureFieldsFromDraft(DraftSaveRequest draft)
+        {
+            if (!string.IsNullOrWhiteSpace(draft.SavedApprover))
+                txtApprover.Text = draft.SavedApprover;
+            if (!string.IsNullOrWhiteSpace(draft.SavedReviewer))
+                txtReviewer.Text = draft.SavedReviewer;
+            if (!string.IsNullOrWhiteSpace(draft.SavedByInspector))
+                txtRecordInspector.Text = draft.SavedByInspector;
+            else
+                ApplyDefaultSignatureFields();
+        }
 
         private void ShowView(string viewName)
         {
@@ -293,7 +379,6 @@ namespace RingKnifeDetector
             ResetParamsForLimisFetch();
             _fieldTracker.ResetAll();
             _currentResults.Clear();
-            dgResults.ItemsSource = null;
             txtConclusion.Text = string.Empty;
             _currentSamples.Clear();
             AddNewSample();
@@ -301,13 +386,8 @@ namespace RingKnifeDetector
             _currentProject = result.Project!;
             _currentEntrustNo = entrustNo;
             FillProjectForm(_currentProject);
-            MarkSystemFieldsFromLimis(result);
-
-            if (!string.IsNullOrEmpty(result.SampleName))
-            {
-                _currentParams.SampleName = result.SampleName;
-                txtSampleName.Text = result.SampleName;
-            }
+            UpdateWitnessFieldLabels(_currentProject.TestNature);
+            ApplyLimisParamFields(result);
 
             if (!string.IsNullOrEmpty(result.Remark))
             {
@@ -317,23 +397,40 @@ namespace RingKnifeDetector
 
             SanitizeRemarkPlaceholders(_currentProject, _currentParams);
             var parseResult = RemarkParser.FillMissing(_currentProject, _currentParams, _currentSamples, result.Remark);
+            ResultTypeHelper.SyncFromDesignText(_currentParams);
 
-            var draftLoaded = false;
             _fieldTracker.RunSuppressed(() =>
             {
-                ApplyParsedFieldsToForm();
-                draftLoaded = TryLoadDraft(entrustNo);
-            });
+                if (!string.IsNullOrEmpty(result.SampleName))
+                {
+                    _currentParams.SampleName = result.SampleName;
+                    txtSampleName.Text = result.SampleName;
+                }
 
-            if (!draftLoaded)
-                _fieldTracker.MarkRemark(parseResult.ExtractedFieldKeys);
+                ApplyParsedFieldsToForm();
+                TryLoadDraft(entrustNo);
+            });
 
             var remarkText = _currentParams.LimisRemark ?? result.Remark ?? string.Empty;
             remarkViewer.ApplyHighlights(remarkText, parseResult.Highlights);
 
-            ApplyDefaultDatesFromProject();
-            if (!string.IsNullOrEmpty(result.SampleNo))
-                RenumberSampleNosFromPrefix(result.SampleNo);
+            _fieldTracker.RunSuppressed(() =>
+            {
+                ApplyDefaultDatesFromProject();
+                if (!string.IsNullOrEmpty(result.SampleNo))
+                    RenumberSampleNosFromPrefix(result.SampleNo);
+                ApplyDefaultSignatureFields();
+            });
+
+            _fieldTracker.ScheduleFinalizeSources(
+                parseResult.ExtractedFieldKeys,
+                () => MarkSystemFieldsFromLimis(result),
+                () =>
+                {
+                    if (result.SampleNameFromHtml && !string.IsNullOrWhiteSpace(result.SampleName))
+                        _fieldTracker.ForceSource("params.sampleName", FieldSource.System);
+                });
+
             RefreshRecordTable();
         }
 
@@ -357,8 +454,64 @@ namespace RingKnifeDetector
             if (!string.IsNullOrWhiteSpace(p.ProjectSection) && !RemarkParser.IsMissingValue(p.ProjectSection))
                 keys.Add("project.projectSection");
             if (!string.IsNullOrWhiteSpace(p.ReportDate)) keys.Add("project.reportDate");
-            if (!string.IsNullOrWhiteSpace(result.SampleName)) keys.Add("params.sampleName");
+            if (result.SampleNameFromHtml && !string.IsNullOrWhiteSpace(result.SampleName))
+                keys.Add("params.sampleName");
+            if (!string.IsNullOrWhiteSpace(result.TestBasis))
+                keys.Add("params.testBasis");
+            if (!string.IsNullOrWhiteSpace(result.TypeSpecification)) keys.Add("params.ringSpec");
             _fieldTracker.MarkSystem(keys);
+        }
+
+        private void UpdateWitnessFieldLabels(string? testNature = null)
+        {
+            var isWitness = TestNatureHelper.IsWitnessSampling(testNature ?? txtTestNature.Text);
+            lblSupervisionUnit.Text = isWitness ? "工程见证：" : "监理单位：";
+            lblConstructionUnit.Text = isWitness ? "样品取样：" : "施工单位：";
+            lblRingSpec.Text = isWitness ? "规格型号：" : "环刀规格：";
+            FieldLabels.SetWitnessSamplingMode(isWitness);
+        }
+
+        private void ApplyLimisParamFields(LimisEntrustResponse result)
+        {
+            if (!string.IsNullOrWhiteSpace(result.TestBasis))
+                SetBasisFromLimis(result.TestBasis);
+
+            if (!result.IsWitnessSampling) return;
+
+            if (!string.IsNullOrWhiteSpace(result.TypeSpecification))
+            {
+                _currentParams.RingSpec = result.TypeSpecification;
+                txtRingSpec.Text = result.TypeSpecification;
+            }
+        }
+
+        private void SetBasisFromLimis(string fullBasis)
+        {
+            _currentParams.TestBasisFull = TestBasisNormalizer.Normalize(fullBasis);
+            ApplyBasisDisplay();
+        }
+
+        private void ApplyBasisDisplay()
+        {
+            var source = !string.IsNullOrWhiteSpace(_currentParams.TestBasisFull)
+                ? _currentParams.TestBasisFull
+                : _currentParams.TestBasis;
+            var display = TestBasisNormalizer.ToDisplay(source, _currentParams.UseFullBasisName);
+            if (string.IsNullOrEmpty(display))
+                display = source;
+
+            _fieldTracker.RunSuppressed(() =>
+            {
+                tglFullBasisName.IsChecked = _currentParams.UseFullBasisName;
+                _currentParams.TestBasis = display;
+                txtTestBasis.Text = display;
+            });
+        }
+
+        private void TglFullBasisName_Changed(object sender, RoutedEventArgs e)
+        {
+            _currentParams.UseFullBasisName = tglFullBasisName.IsChecked == true;
+            ApplyBasisDisplay();
         }
 
         private List<TaskItem> ApplyTaskFilters(List<TaskItem> tasks)
@@ -397,7 +550,7 @@ namespace RingKnifeDetector
             RingSpec = "200cm³",
             SampleName = "回填土",
             TestBasis = "JTG 3450-2019",
-            JudgeBasis = "JTG 3450-2019",
+            JudgeBasis = ReportDefaults.MissingFieldPlaceholder,
             RecordTemplate = GetRingsPerBlock() == 3 ? "group3" : "group2",
             ResultType = "compaction_coeff"
         };
@@ -425,7 +578,7 @@ namespace RingKnifeDetector
         private static string ExtractDesignNumber(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-            var value = text.Trim();
+            var value = text.Trim().Replace('％', '%');
             while (value.StartsWith('≥') || value.StartsWith('>'))
                 value = value[1..].TrimStart('=');
             return value.TrimEnd('%', ' ').Trim();
@@ -444,7 +597,7 @@ namespace RingKnifeDetector
             txtMaxDryDensity.Text = _currentParams.MaxDryDensity?.ToString() ?? string.Empty;
             txtTestLocation.Text = _currentParams.TestLocation;
             txtOptimalMoisture.Text = _currentParams.OptimalMoisture?.ToString() ?? string.Empty;
-            txtTestBasis.Text = _currentParams.TestBasis;
+            ApplyBasisDisplay();
             txtJudgeBasis.Text = _currentParams.JudgeBasis;
             remarkViewer.Text = _currentParams.LimisRemark;
             rbCompactionPercent.IsChecked = _currentParams.ResultType == "compaction_percent";
@@ -476,7 +629,8 @@ namespace RingKnifeDetector
             }
 
             _currentProject.ReportDate = end;
-            SetDatePicker(dpReportDate, end);
+            fieldReportDate.SetDate(end);
+            fieldEntrustDate.SetDate(start);
         }
 
         private bool TryLoadDraft(string entrustNo)
@@ -494,7 +648,7 @@ namespace RingKnifeDetector
                 txtRingSpec.Text = d.Params.RingSpec;
                 txtCompactionMethod.Text = d.Params.CompactionMethod;
                 txtTestLocation.Text = d.Params.TestLocation;
-                txtTestBasis.Text = d.Params.TestBasis;
+                ApplyBasisDisplay();
                 txtJudgeBasis.Text = d.Params.JudgeBasis;
                 remarkViewer.Text = d.Params.LimisRemark;
                 txtMaxDryDensity.Text = d.Params.MaxDryDensity?.ToString() ?? "";
@@ -504,17 +658,20 @@ namespace RingKnifeDetector
             if (d.Samples.Count > 0)
             {
                 _currentSamples = d.Samples;
+                SyncSampleDatesFromFirst(_currentSamples);
                 RefreshRecordTable();
             }
             if (d.CalcResults.Count > 0)
             {
                 _currentResults = d.CalcResults;
-                dgResults.ItemsSource = _currentResults;
+                SyncResultSharedFieldsFromFirstSample();
+                RefreshResultsGrid();
             }
             if (!string.IsNullOrEmpty(d.OverallConclusion))
                 txtConclusion.Text = d.OverallConclusion;
             if (!string.IsNullOrWhiteSpace(d.ReportRemarks))
                 txtReportRemarks.Text = d.ReportRemarks;
+            ApplySignatureFieldsFromDraft(d);
             return true;
         }
 
@@ -553,9 +710,10 @@ namespace RingKnifeDetector
             txtProjectName.Text = p.ProjectName;
             txtUnitAddress.Text = p.UnitAddress;
             txtProjectAddress.Text = p.ProjectAddress;
-            SetDatePicker(dpEntrustDate, p.EntrustDate);
+            SetDateField(fieldEntrustDate, p.EntrustDate);
             txtProjectSection.Text = p.ProjectSection;
-            SetDatePicker(dpReportDate, p.ReportDate);
+            SetDateField(fieldReportDate, p.ReportDate);
+            UpdateWitnessFieldLabels(p.TestNature);
             RenumberSampleNos();
         }
 
@@ -575,7 +733,6 @@ namespace RingKnifeDetector
             else
                 RenumberSampleNos();
             _currentResults.Clear();
-            dgResults.ItemsSource = null;
             txtConclusion.Text = "";
             RefreshRecordTable();
         }
@@ -595,14 +752,31 @@ namespace RingKnifeDetector
             _currentSamples.Clear();
             _currentResults.Clear();
             AddNewSample();
-            dgResults.ItemsSource = null;
+            if (!string.IsNullOrWhiteSpace(remarkViewer.Text))
+            {
+                var parseResult = RemarkParser.FillMissing(_currentProject, _currentParams, _currentSamples, remarkViewer.Text);
+                ResultTypeHelper.SyncFromDesignText(_currentParams);
+                _fieldTracker.RunSuppressed(SyncParamsToUi);
+                _fieldTracker.ScheduleFinalizeSources(parseResult.ExtractedFieldKeys);
+            }
             txtConclusion.Text = "";
             RefreshRecordTable();
+        }
+
+        private void SyncParamsToUi()
+        {
+            txtCompactionMethod.Text = _currentParams.CompactionMethod;
+            txtDesignRequirement.Text = _currentParams.DesignRequirementText;
+            txtMaxDryDensity.Text = _currentParams.MaxDryDensity?.ToString() ?? string.Empty;
+            txtOptimalMoisture.Text = _currentParams.OptimalMoisture?.ToString() ?? string.Empty;
+            txtTestLocation.Text = _currentParams.TestLocation;
+            txtMaterialType.Text = _currentParams.MaterialType;
         }
 
         private void ResultType_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsLoaded) return;
+            _currentParams.ResultType = rbCompactionPercent.IsChecked == true ? "compaction_percent" : "compaction_coeff";
             RefreshRecordTable();
         }
 
@@ -628,27 +802,32 @@ namespace RingKnifeDetector
             txtProjectName.Text = "";
             txtUnitAddress.Text = "";
             txtProjectAddress.Text = "";
-            dpEntrustDate.SelectedDate = null;
+            fieldEntrustDate.SetDate(string.Empty);
             txtProjectSection.Text = "";
-            dpReportDate.SelectedDate = null;
+            fieldReportDate.SetDate(string.Empty);
             txtSampleName.Text = "回填土";
             txtMaterialType.Text = "";
             txtRingSpec.Text = "200cm³";
-            txtCompactionMethod.Text = "";
+            txtCompactionMethod.Text = ReportDefaults.MissingFieldPlaceholder;
             txtDesignRequirement.Text = "";
             txtMaxDryDensity.Text = "";
             txtTestLocation.Text = "";
             txtOptimalMoisture.Text = "";
-            txtTestBasis.Text = "JTG 3450-2019";
-            txtJudgeBasis.Text = "JTG 3450-2019";
+            _currentParams.TestBasisFull = string.Empty;
+            _currentParams.UseFullBasisName = false;
+            _currentParams.JudgeBasis = ReportDefaults.MissingFieldPlaceholder;
+            ApplyBasisDisplay();
+            txtJudgeBasis.Text = _currentParams.JudgeBasis;
             txtConclusion.Text = "";
             remarkViewer.Text = "";
-            txtReportRemarks.Text = _settingsService.LoadSettings().DefaultReportRemarks;
+            var savedRemarks = _settingsService.LoadSettings().DefaultReportRemarks;
+            txtReportRemarks.Text = string.IsNullOrWhiteSpace(savedRemarks)
+                ? ReportDefaults.DefaultReportRemarks
+                : savedRemarks;
             rbCompactionCoeff.IsChecked = true;
 
             _currentSamples.Clear();
             InitializeDefaultValues();
-            dgResults.ItemsSource = null;
             txtStatus.Text = "已清空所有数据";
         }
 
@@ -659,12 +838,18 @@ namespace RingKnifeDetector
             {
                 UpdateCurrentParams();
                 UpdateCurrentSamples();
+                SyncSampleDatesFromFirst(_currentSamples);
+                foreach (var sample in _currentSamples)
+                {
+                    sample.SamplingDate = DateHelper.Normalize(sample.SamplingDate);
+                    sample.TestDate = DateHelper.EnsureRangeFormat(sample.TestDate);
+                }
 
                 var request = new CalcRequest { Params = _currentParams, Samples = _currentSamples };
                 var response = _calculationService.CalculateAll(request);
                 _currentResults = response.Results;
-                dgResults.ItemsSource = null;
-                dgResults.ItemsSource = _currentResults;
+                SyncResultSharedFieldsFromFirstSample();
+                RefreshResultsGrid();
                 txtConclusion.Text = response.OverallConclusion;
                 RefreshRecordTable();
                 txtStatus.Text = $"计算完成，共{response.Results.Count}个测点";
@@ -683,22 +868,22 @@ namespace RingKnifeDetector
             _currentProject.EntrustUnit = txtEntrustUnit.Text;
             _currentProject.Contact = txtContact.Text;
             _currentProject.ReportNo = txtReportNo.Text;
-            _currentProject.EntrustDate = GetDatePickerText(dpEntrustDate);
+            _currentProject.EntrustDate = GetDateFieldValue(fieldEntrustDate);
             _currentProject.SupervisionUnit = txtSupervisionUnit.Text;
             _currentProject.ConstructionUnit = txtConstructionUnit.Text;
             _currentProject.UnitAddress = txtUnitAddress.Text;
             _currentProject.ProjectAddress = txtProjectAddress.Text;
             _currentProject.ProjectSection = txtProjectSection.Text;
-            _currentProject.ReportDate = GetDatePickerText(dpReportDate);
+            _currentProject.ReportDate = GetDateFieldValue(fieldReportDate);
 
             _currentParams.SampleName = txtSampleName.Text;
             _currentParams.MaterialType = txtMaterialType.Text;
             _currentParams.RingSpec = txtRingSpec.Text;
             _currentParams.CompactionMethod = txtCompactionMethod.Text;
             _currentParams.TestLocation = txtTestLocation.Text;
+            _currentParams.UseFullBasisName = tglFullBasisName.IsChecked == true;
             _currentParams.TestBasis = txtTestBasis.Text;
             _currentParams.JudgeBasis = txtJudgeBasis.Text;
-            _currentParams.ResultType = rbCompactionPercent.IsChecked == true ? "compaction_percent" : "compaction_coeff";
             _currentParams.RecordTemplate = GetRingsPerBlock() == 3 ? "group3" : "group2";
             _currentParams.LimisRemark = remarkViewer.Text;
 
@@ -709,10 +894,18 @@ namespace RingKnifeDetector
             if (decimal.TryParse(designInput, out var dr)) _currentParams.DesignRequirement = dr;
             else _currentParams.DesignRequirement = null;
 
+            var rawDesignText = txtDesignRequirement.Text.Trim();
+            if (rawDesignText.Contains("压实度", StringComparison.Ordinal))
+                _currentParams.ResultType = "compaction_percent";
+            else if (rawDesignText.Contains("压实系数", StringComparison.Ordinal)
+                     || rawDesignText.Contains("固体体积率", StringComparison.Ordinal))
+                _currentParams.ResultType = "compaction_coeff";
+            else
+                _currentParams.ResultType = rbCompactionPercent.IsChecked == true ? "compaction_percent" : "compaction_coeff";
+
             if (!string.IsNullOrWhiteSpace(designInput))
             {
-                var isPercent = _currentParams.ResultType == "compaction_percent"
-                    || rbCompactionPercent.IsChecked == true;
+                var isPercent = _currentParams.ResultType == "compaction_percent";
                 _currentParams.DesignRequirementText = isPercent
                     ? $"≥{designInput.TrimEnd('%', '％')}%"
                     : $"≥{designInput}";
@@ -721,6 +914,10 @@ namespace RingKnifeDetector
             {
                 _currentParams.DesignRequirementText = string.Empty;
             }
+
+            ResultTypeHelper.SyncFromDesignText(_currentParams);
+            rbCompactionPercent.IsChecked = _currentParams.ResultType == "compaction_percent";
+            rbCompactionCoeff.IsChecked = _currentParams.ResultType != "compaction_percent";
 
             if (decimal.TryParse(txtOptimalMoisture.Text, out var om)) _currentParams.OptimalMoisture = om;
             else _currentParams.OptimalMoisture = null;
@@ -745,6 +942,59 @@ namespace RingKnifeDetector
             return $"环刀法压实度检测报告_{DateTime.Now:yyyyMMddHHmmss}.{extension}";
         }
 
+        private string GetExportRecordFileName()
+        {
+            var reportNo = txtReportNo.Text?.Trim();
+            if (!string.IsNullOrEmpty(reportNo))
+                return $"{reportNo}原始记录.docx";
+            var entrustNo = txtEntrustNo.Text?.Trim();
+            if (!string.IsNullOrEmpty(entrustNo))
+                return $"{entrustNo}原始记录.docx";
+            return $"环刀法原始记录_{DateTime.Now:yyyyMMddHHmmss}.docx";
+        }
+
+        // ========== Export Record Word ==========
+        private void BtnExportRecord_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentSamples.Count == 0)
+            {
+                MessageBox.Show("暂无原始记录数据", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dlg = new SaveFileDialog
+            {
+                Filter = "Word文件|*.docx",
+                Title = "导出原始记录",
+                FileName = GetExportRecordFileName()
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            try
+            {
+                UpdateCurrentParams();
+                txtStatus.Text = "正在导出原始记录...";
+                var inspector = txtRecordInspector.Text.Trim();
+                var reviewer = txtReviewer.Text.Trim();
+                var savedPath = _recordWordExportService.ExportRecord(
+                    _currentSamples, _currentParams, _currentResults,
+                    inspector, reviewer, dlg.FileName);
+                txtStatus.Text = "原始记录导出成功";
+                ShowExportSuccessMessage(savedPath, dlg.FileName, Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                var message = ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("正在由另一进程使用", StringComparison.OrdinalIgnoreCase)
+                    ? "导出失败: 无法写入文件，请关闭正在打开的 Word 文档后重试。"
+                    : $"导出失败: {ex.Message}";
+                MessageBox.Show(message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                txtStatus.Text = "导出失败";
+            }
+        }
+
         // ========== Export Word ==========
         private void BtnExportWord_Click(object sender, RoutedEventArgs e)
         {
@@ -767,24 +1017,20 @@ namespace RingKnifeDetector
                 {
                     UpdateCurrentParams();
                     txtStatus.Text = "正在导出Word...";
-                    var settings = _settingsService.LoadSettings();
-                    var inspector = GetInspectorName(settings);
+                    var inspector = txtRecordInspector.Text.Trim();
+                    var conclusion = txtConclusion.Text;
+                    var reminders = WordExportReminderService.CollectReminders(
+                        _currentProject, _currentParams, _currentResults, conclusion);
                     var savedPath = _wordExportService.ExportToWord(
-                        _currentProject, _currentParams, _currentResults, txtConclusion.Text,
-                        txtReportRemarks.Text, inspector, dlg.FileName);
+                        _currentProject, _currentParams, _currentResults, conclusion,
+                        txtReportRemarks.Text,
+                        txtApprover.Text.Trim(),
+                        txtReviewer.Text.Trim(),
+                        inspector,
+                        dlg.FileName);
+                    PersistSignatureDefaults();
                     txtStatus.Text = "导出成功";
-                    if (!string.Equals(savedPath, dlg.FileName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        MessageBox.Show(
-                            $"目标文件正在被其他程序使用，已另存为：\n\n{savedPath}",
-                            "导出成功",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
-                    }
-                    else
-                    {
-                        MessageBox.Show($"导出成功\n\n{savedPath}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
+                    ShowExportSuccessMessage(savedPath, dlg.FileName, reminders);
                 }
                 catch (Exception ex)
                 {
@@ -796,6 +1042,32 @@ namespace RingKnifeDetector
                     txtStatus.Text = "导出失败";
                 }
             }
+        }
+
+        private static void ShowExportSuccessMessage(
+            string savedPath,
+            string requestedPath,
+            IReadOnlyList<string> reminders)
+        {
+            var message = new System.Text.StringBuilder();
+            if (!string.Equals(savedPath, requestedPath, StringComparison.OrdinalIgnoreCase))
+                message.AppendLine("目标文件正在被其他程序使用，已另存为：");
+            else
+                message.AppendLine("导出成功");
+
+            message.AppendLine();
+            message.AppendLine(savedPath);
+
+            if (reminders.Count > 0)
+            {
+                message.AppendLine();
+                message.AppendLine("【导出提醒】（不影响导出）");
+                foreach (var item in reminders)
+                    message.AppendLine($"• {item}");
+            }
+
+            var icon = reminders.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information;
+            MessageBox.Show(message.ToString(), "导出成功", MessageBoxButton.OK, icon);
         }
 
         // ========== Save Draft ==========
@@ -812,7 +1084,7 @@ namespace RingKnifeDetector
                 UpdateCurrentParams();
                 UpdateCurrentSamples();
                 var settings = _settingsService.LoadSettings();
-                var inspector = GetInspectorName(settings);
+                var inspector = txtRecordInspector.Text.Trim();
                 var draft = new DraftSaveRequest
                 {
                     Project = _currentProject,
@@ -821,13 +1093,16 @@ namespace RingKnifeDetector
                     CalcResults = _currentResults,
                     OverallConclusion = txtConclusion.Text,
                     ReportRemarks = txtReportRemarks.Text,
-                    SavedByInspector = inspector
+                    SavedByInspector = inspector,
+                    SavedApprover = txtApprover.Text.Trim(),
+                    SavedReviewer = txtReviewer.Text.Trim()
                 };
                 var result = _draftService.SaveDraft(_currentEntrustNo, draft);
                 if (result.Success)
                 {
                     settings.DefaultReportRemarks = txtReportRemarks.Text;
                     _settingsService.SaveSettings(settings);
+                    PersistSignatureDefaults();
                     _draftInspectorMap[_currentEntrustNo] = inspector;
                     txtStatus.Text = "草稿保存成功";
                     MessageBox.Show("草稿保存成功", "成功", MessageBoxButton.OK, MessageBoxImage.Information);

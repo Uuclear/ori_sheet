@@ -135,4 +135,46 @@ public class CalculationServiceTests
         Assert.Single(response.Results);
         Assert.False(string.IsNullOrEmpty(response.OverallConclusion));
     }
+
+    [Fact]
+    public void CalculateAll_Group3_RequiresAllRingsToPass()
+    {
+        var ringTemplate = new RingMeasurement
+        {
+            RingSampleMass = 596m,
+            RingMass = 176m,
+            RingVolume = 200m,
+            Boxes = new List<AluminumBox>
+            {
+                new() { BoxMass = 10m, WetSampleMass = 21m, DrySampleMass = 20m },
+                new() { BoxMass = 10m, WetSampleMass = 21m, DrySampleMass = 20m }
+            }
+        };
+
+        var request = new CalcRequest
+        {
+            Params = new RecordParams
+            {
+                MaxDryDensity = 1.92m,
+                DesignRequirement = 0.93m,
+                ResultType = "compaction_coeff",
+                RecordTemplate = "group3"
+            },
+            Samples = new List<RingKnifeSample>
+            {
+                new()
+                {
+                    SampleNo = "1",
+                    Rings = new List<RingMeasurement> { ringTemplate, ringTemplate, ringTemplate }
+                }
+            }
+        };
+
+        var response = _service.CalculateAll(request);
+        var sample = response.Results[0];
+
+        Assert.Equal(3, sample.Rings.Count);
+        Assert.All(sample.Rings, ring => Assert.Equal("符合设计要求", ring.Conclusion));
+        Assert.Contains("符合设计要求", response.OverallConclusion);
+    }
 }

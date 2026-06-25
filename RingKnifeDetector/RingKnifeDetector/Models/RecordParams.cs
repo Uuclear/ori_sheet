@@ -65,7 +65,13 @@ namespace RingKnifeDetector.Models
         /// <summary>
         /// 判定依据
         /// </summary>
-        public string JudgeBasis { get; set; } = "JTG 3450-2019";
+        public string JudgeBasis { get; set; } = ReportDefaults.MissingFieldPlaceholder;
+
+        /// <summary>LIMIS 获取的检测标准全文（含《书名号》）。</summary>
+        public string TestBasisFull { get; set; } = string.Empty;
+
+        /// <summary>检测依据是否显示《书名号》段。</summary>
+        public bool UseFullBasisName { get; set; }
 
         /// <summary>
         /// 结果类型：压实系数或压实度

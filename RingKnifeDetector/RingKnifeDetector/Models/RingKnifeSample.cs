@@ -1,5 +1,7 @@
 using System.ComponentModel;
 
+using RingKnifeDetector.Helpers;
+
 namespace RingKnifeDetector.Models
 {
     public class RingKnifeSample : INotifyPropertyChanged
@@ -56,7 +58,7 @@ namespace RingKnifeDetector.Models
                     {
                         var wetSoil = box.WetSampleMass.Value - box.BoxMass.Value;
                         box.MoistureRate = wetSoil > drySoil
-                            ? Math.Round((wetSoil - drySoil) / drySoil * 100, 2) : null;
+                            ? CompactionFormat.RoundMoisture((wetSoil - drySoil) / drySoil * 100) : null;
                     }
                     else box.MoistureRate = null;
                 }
@@ -67,7 +69,7 @@ namespace RingKnifeDetector.Models
                 .Where(b => b.MoistureRate != null)
                 .Select(b => b.MoistureRate!.Value).ToList();
             AvgMoisture = validMoistures.Count > 0
-                ? Math.Round(validMoistures.Average(), 2) : null;
+                ? CompactionFormat.RoundMoisture(validMoistures.Average()) : null;
 
             if (WetDensity != null && AvgMoisture != null)
             {

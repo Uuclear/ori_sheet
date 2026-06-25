@@ -1,3 +1,5 @@
+using RingKnifeDetector.Helpers;
+
 namespace RingKnifeDetector.Models
 {
     /// <summary>
@@ -29,6 +31,21 @@ namespace RingKnifeDetector.Models
         /// 干密度
         /// </summary>
         public decimal? DryDensity { get; set; }
+
+        /// <summary>
+        /// 压实系数（单环刀）
+        /// </summary>
+        public decimal? CompactionCoeff { get; set; }
+
+        /// <summary>
+        /// 压实度（单环刀，%）
+        /// </summary>
+        public decimal? CompactionPercent { get; set; }
+
+        /// <summary>
+        /// 单环刀结论
+        /// </summary>
+        public string Conclusion { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -60,6 +77,10 @@ namespace RingKnifeDetector.Models
         /// 检测日期
         /// </summary>
         public string TestDate { get; set; } = string.Empty;
+
+        public string SamplingDateDisplay => DateHelper.FormatWordDate(SamplingDate);
+
+        public string TestDateDisplay => DateHelper.FormatWordDate(DateHelper.EnsureRangeFormat(TestDate));
 
         /// <summary>
         /// 湿土质量

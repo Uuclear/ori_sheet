@@ -1,20 +1,31 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using RingKnifeDetector.Models;
+using RingKnifeDetector.Views;
 
 namespace RingKnifeDetector.Services
 {
     public class FieldSourceTracker
     {
-        private static readonly SolidColorBrush Green = new(Color.FromRgb(0x4C, 0xAF, 0x50));
-        private static readonly SolidColorBrush Blue = new(Color.FromRgb(0x21, 0x96, 0xF3));
-        private static readonly SolidColorBrush Yellow = new(Color.FromRgb(0xFF, 0xC1, 0x07));
+        private static readonly SolidColorBrush Green = Freeze(Color.FromRgb(0x4C, 0xAF, 0x50));
+        private static readonly SolidColorBrush Blue = Freeze(Color.FromRgb(0x21, 0x96, 0xF3));
+        private static readonly SolidColorBrush Yellow = Freeze(Color.FromRgb(0xFF, 0xC1, 0x07));
         private static readonly SolidColorBrush Transparent = Brushes.Transparent;
 
         private readonly Dictionary<string, FieldSource> _sources = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _systemReferences = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _remarkReferences = new(StringComparer.Ordinal);
         private readonly Dictionary<string, (FrameworkElement input, Border indicator)> _bindings = new(StringComparer.Ordinal);
         private bool _suppressManual;
+
+        private static SolidColorBrush Freeze(Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
 
         public void Register(string key, FrameworkElement input, Border indicator)
         {
@@ -23,6 +34,8 @@ namespace RingKnifeDetector.Services
                 tb.TextChanged += (_, _) => OnInputChanged(key);
             else if (input is DatePicker dp)
                 dp.SelectedDateChanged += (_, _) => OnInputChanged(key);
+            else if (input is ChineseDateField dateField)
+                dateField.ValueChanged += (_, _) => OnInputChanged(key);
         }
 
         public void AttachIndicatorToGridCell(TextBox textBox, string key, Panel parentGrid)
@@ -33,8 +46,38 @@ namespace RingKnifeDetector.Services
                 AttachIndicatorToContainer(textBox, key, parentGrid, textBox);
         }
 
+        public void AttachIndicatorToGridCell(FrameworkElement content, string key, Panel parentGrid, FrameworkElement inputForManual)
+        {
+            if (content.Parent is Grid inner && ReferenceEquals(inner.Parent, parentGrid))
+                AttachIndicatorToContainer(inner, key, parentGrid, inputForManual);
+            else
+                AttachIndicatorToContainer(content, key, parentGrid, inputForManual);
+        }
+
         public void AttachIndicatorToDatePicker(DatePicker picker, string key, Panel parentGrid) =>
             AttachIndicatorToContainer(picker, key, parentGrid, picker);
+
+        public void AttachSideIndicator(
+            FrameworkElement content,
+            string key,
+            Panel parentGrid,
+            int indicatorColumn,
+            FrameworkElement inputForManual)
+        {
+            var row = Grid.GetRow(content);
+            var indicator = new Border
+            {
+                Width = 8,
+                MinHeight = 18,
+                Margin = new Thickness(1, 2, 0, 2),
+                Background = Transparent,
+                ToolTip = "未填写"
+            };
+            Grid.SetRow(indicator, row);
+            Grid.SetColumn(indicator, indicatorColumn);
+            parentGrid.Children.Add(indicator);
+            Register(key, inputForManual, indicator);
+        }
 
         private void AttachIndicatorToContainer(
             FrameworkElement content,
@@ -60,6 +103,7 @@ namespace RingKnifeDetector.Services
             var indicator = new Border
             {
                 Width = 8,
+                MinHeight = 18,
                 Margin = new Thickness(2, 2, 0, 2),
                 Background = Transparent,
                 ToolTip = "未填写"
@@ -71,11 +115,21 @@ namespace RingKnifeDetector.Services
             Register(key, inputForManual, indicator);
         }
 
-        public void SetSource(string key, FieldSource source)
+        public void ForceSource(string key, FieldSource source)
         {
-            if (!_bindings.ContainsKey(key)) return;
-            _sources[key] = source;
-            RefreshIndicator(key);
+            if (_bindings.TryGetValue(key, out var pair))
+            {
+                var value = ReadFieldValue(pair.input);
+                if (source == FieldSource.System)
+                {
+                    _systemReferences[key] = value;
+                    _remarkReferences.Remove(key);
+                }
+                else if (source == FieldSource.Remark && !_systemReferences.ContainsKey(key))
+                    _remarkReferences[key] = value;
+            }
+
+            SetSource(key, source);
         }
 
         public void MarkSystem(IEnumerable<string> keys)
@@ -84,7 +138,12 @@ namespace RingKnifeDetector.Services
             try
             {
                 foreach (var key in keys)
+                {
+                    if (!_bindings.TryGetValue(key, out var pair)) continue;
+                    _systemReferences[key] = ReadFieldValue(pair.input);
+                    _remarkReferences.Remove(key);
                     SetSource(key, FieldSource.System);
+                }
             }
             finally
             {
@@ -98,7 +157,12 @@ namespace RingKnifeDetector.Services
             try
             {
                 foreach (var key in keys)
+                {
+                    if (!_bindings.TryGetValue(key, out var pair)) continue;
+                    if (_systemReferences.ContainsKey(key)) continue;
+                    _remarkReferences[key] = ReadFieldValue(pair.input);
                     SetSource(key, FieldSource.Remark);
+                }
             }
             finally
             {
@@ -106,7 +170,51 @@ namespace RingKnifeDetector.Services
             }
         }
 
-        /// <summary>批量写入表单时抑制 TextChanged 触发的「手动修改」标记。</summary>
+        public void MarkUnmarkedAsManual()
+        {
+            _suppressManual = true;
+            try
+            {
+                foreach (var key in _bindings.Keys)
+                {
+                    var source = _sources.GetValueOrDefault(key, FieldSource.None);
+                    if (source is FieldSource.System or FieldSource.Remark) continue;
+                    if (_systemReferences.ContainsKey(key) || _remarkReferences.ContainsKey(key))
+                    {
+                        ReconcileSource(key);
+                        continue;
+                    }
+
+                    SetSource(key, FieldSource.Manual);
+                }
+            }
+            finally
+            {
+                _suppressManual = false;
+            }
+        }
+
+        public void ScheduleFinalizeSources(
+            IEnumerable<string> remarkKeys,
+            Action? markSystem = null,
+            Action? afterFinalize = null)
+        {
+            var list = remarkKeys.Where(k => _bindings.ContainsKey(k)).ToList();
+
+            void Apply()
+            {
+                markSystem?.Invoke();
+                MarkRemark(list);
+                MarkUnmarkedAsManual();
+                afterFinalize?.Invoke();
+            }
+
+            if (Application.Current?.Dispatcher is { } dispatcher)
+                dispatcher.BeginInvoke(Apply, DispatcherPriority.ApplicationIdle);
+            else
+                Apply();
+        }
+
         public void RunSuppressed(Action action)
         {
             _suppressManual = true;
@@ -123,6 +231,8 @@ namespace RingKnifeDetector.Services
         public void ResetAll()
         {
             _sources.Clear();
+            _systemReferences.Clear();
+            _remarkReferences.Clear();
             foreach (var key in _bindings.Keys)
                 RefreshIndicator(key);
         }
@@ -130,9 +240,48 @@ namespace RingKnifeDetector.Services
         private void OnInputChanged(string key)
         {
             if (_suppressManual) return;
-            if (!_bindings.ContainsKey(key)) return;
-            SetSource(key, FieldSource.Manual);
+            ReconcileSource(key);
         }
+
+        private void ReconcileSource(string key)
+        {
+            if (!_bindings.TryGetValue(key, out var pair)) return;
+
+            var current = ReadFieldValue(pair.input);
+            if (_systemReferences.TryGetValue(key, out var systemValue)
+                && string.Equals(current, systemValue, StringComparison.Ordinal))
+            {
+                SetSource(key, FieldSource.System);
+                return;
+            }
+
+            if (_remarkReferences.TryGetValue(key, out var remarkValue)
+                && string.Equals(current, remarkValue, StringComparison.Ordinal))
+            {
+                SetSource(key, FieldSource.Remark);
+                return;
+            }
+
+            if (_systemReferences.ContainsKey(key) || _remarkReferences.ContainsKey(key))
+                SetSource(key, FieldSource.Manual);
+            else if (_sources.GetValueOrDefault(key) == FieldSource.Manual)
+                SetSource(key, FieldSource.Manual);
+        }
+
+        private void SetSource(string key, FieldSource source)
+        {
+            if (!_bindings.ContainsKey(key)) return;
+            _sources[key] = source;
+            RefreshIndicator(key);
+        }
+
+        private static string ReadFieldValue(FrameworkElement input) => input switch
+        {
+            TextBox tb => tb.Text ?? string.Empty,
+            DatePicker dp => dp.SelectedDate?.ToString("yyyy-MM-dd") ?? string.Empty,
+            ChineseDateField dateField => dateField.NormalizedValue ?? string.Empty,
+            _ => string.Empty
+        };
 
         private void RefreshIndicator(string key)
         {
@@ -149,7 +298,7 @@ namespace RingKnifeDetector.Services
             {
                 FieldSource.System => $"{FieldLabels.Get(key)}：来自 LIMIS 系统",
                 FieldSource.Remark => $"{FieldLabels.Get(key)}：从备注正则提取",
-                FieldSource.Manual => $"{FieldLabels.Get(key)}：手动修改",
+                FieldSource.Manual => $"{FieldLabels.Get(key)}：未从备注提取或手动修改",
                 _ => $"{FieldLabels.Get(key)}：未标记"
             };
         }
@@ -186,5 +335,12 @@ namespace RingKnifeDetector.Services
 
         public static string Get(string key) =>
             Map.TryGetValue(key, out var label) ? label : key;
+
+        public static void SetWitnessSamplingMode(bool isWitness)
+        {
+            Map["project.supervisionUnit"] = isWitness ? "工程见证" : "监理单位";
+            Map["project.constructionUnit"] = isWitness ? "样品取样" : "施工单位";
+            Map["params.ringSpec"] = isWitness ? "规格型号" : "环刀规格";
+        }
     }
 }

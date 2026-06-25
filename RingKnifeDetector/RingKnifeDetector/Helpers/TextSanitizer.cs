@@ -10,21 +10,27 @@ namespace RingKnifeDetector.Helpers
             return value.Replace("。", string.Empty);
         }
 
+        public static string TrimEdges(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Trim().Trim('\t');
+        }
+
         public static void SanitizeProject(ProjectInfo project)
         {
-            project.EntrustNo = RemoveChinesePeriods(project.EntrustNo);
-            project.ReportNo = RemoveChinesePeriods(project.ReportNo);
-            project.EntrustUnit = RemoveChinesePeriods(project.EntrustUnit);
-            project.Contact = RemoveChinesePeriods(project.Contact);
-            project.SupervisionUnit = RemoveChinesePeriods(project.SupervisionUnit);
-            project.ConstructionUnit = RemoveChinesePeriods(project.ConstructionUnit);
-            project.ProjectName = RemoveChinesePeriods(project.ProjectName);
-            project.UnitAddress = RemoveChinesePeriods(project.UnitAddress);
-            project.ProjectAddress = RemoveChinesePeriods(project.ProjectAddress);
-            project.EntrustDate = RemoveChinesePeriods(project.EntrustDate);
-            project.ProjectSection = RemoveChinesePeriods(project.ProjectSection);
-            project.ReportDate = RemoveChinesePeriods(project.ReportDate);
-            project.TestNature = RemoveChinesePeriods(project.TestNature);
+            project.EntrustNo = TrimEdges(RemoveChinesePeriods(project.EntrustNo));
+            project.ReportNo = TrimEdges(RemoveChinesePeriods(project.ReportNo));
+            project.EntrustUnit = TrimEdges(RemoveChinesePeriods(project.EntrustUnit));
+            project.Contact = TrimEdges(RemoveChinesePeriods(project.Contact));
+            project.SupervisionUnit = TrimEdges(RemoveChinesePeriods(project.SupervisionUnit));
+            project.ConstructionUnit = TrimEdges(RemoveChinesePeriods(project.ConstructionUnit));
+            project.ProjectName = TrimEdges(RemoveChinesePeriods(project.ProjectName));
+            project.UnitAddress = TrimEdges(RemoveChinesePeriods(project.UnitAddress));
+            project.ProjectAddress = TrimEdges(RemoveChinesePeriods(project.ProjectAddress));
+            project.EntrustDate = TrimEdges(RemoveChinesePeriods(project.EntrustDate));
+            project.ProjectSection = TrimEdges(RemoveChinesePeriods(project.ProjectSection));
+            project.ReportDate = TrimEdges(RemoveChinesePeriods(project.ReportDate));
+            project.TestNature = TrimEdges(RemoveChinesePeriods(project.TestNature));
         }
 
         public static void SanitizeParams(RecordParams parameters)
