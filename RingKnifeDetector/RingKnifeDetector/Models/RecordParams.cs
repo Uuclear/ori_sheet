@@ -65,7 +65,7 @@ namespace RingKnifeDetector.Models
         /// <summary>
         /// 判定依据
         /// </summary>
-        public string JudgeBasis { get; set; } = ReportDefaults.MissingFieldPlaceholder;
+        public string JudgeBasis { get; set; } = ReportDefaults.DefaultJudgeBasis;
 
         /// <summary>LIMIS 获取的检测标准全文（含《书名号》）。</summary>
         public string TestBasisFull { get; set; } = string.Empty;

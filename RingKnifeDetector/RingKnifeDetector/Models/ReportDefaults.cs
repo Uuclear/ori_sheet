@@ -4,6 +4,8 @@ namespace RingKnifeDetector.Models
     {
         public const string MissingFieldPlaceholder = "——";
 
+        public const string DefaultJudgeBasis = "设计要求";
+
         public const int ReportRemarksTemplateVersion = 1;
 
         public const string DefaultReportRemarks =

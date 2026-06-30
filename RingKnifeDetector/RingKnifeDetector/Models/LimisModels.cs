@@ -55,6 +55,7 @@ namespace RingKnifeDetector.Models
         public int ReportRemarksTemplateVersion { get; set; }
         public string DefaultApprover { get; set; } = string.Empty;
         public string DefaultReviewer { get; set; } = string.Empty;
+        public string DefaultJudgeBasis { get; set; } = ReportDefaults.DefaultJudgeBasis;
     }
 
     /// <summary>

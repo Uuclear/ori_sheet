@@ -293,7 +293,7 @@
                                               Padding="8,2" Height="24" Click="TglFullBasisName_Changed"/>
                             </Grid>
                             <TextBlock Grid.Row="4" Grid.Column="3" Text="判定依据：" Style="{StaticResource CellLabel}"/>
-                            <TextBox Grid.Row="4" Grid.Column="4" x:Name="txtJudgeBasis" Text="——" Style="{StaticResource CellInput}"/>
+                            <TextBox Grid.Row="4" Grid.Column="4" x:Name="txtJudgeBasis" Text="设计要求" Style="{StaticResource CellInput}"/>
                         </Grid>
                     </GroupBox>
 

@@ -19,6 +19,7 @@ namespace RingKnifeDetector.Services
             reminders.AddRange(CollectDateOrderReminders(project, results));
             reminders.AddRange(CollectConclusionReminders(results, overallConclusion));
             reminders.AddRange(CollectCompactionReminders(results));
+            reminders.AddRange(MoistureValidation.CollectBoxMoistureWarnings(results));
             return reminders;
         }
 

@@ -10,6 +10,13 @@ namespace RingKnifeDetector.Views
 {
     public partial class RecordTableControl : UserControl
     {
+        private static readonly Brush MoistureWarningBrush = new SolidColorBrush(Color.FromRgb(0xD3, 0x2F, 0x2F));
+
+        static RecordTableControl()
+        {
+            MoistureWarningBrush.Freeze();
+        }
+
         private const int ColCount = 21;
         private static readonly double[] ColWidths =
         {
@@ -153,6 +160,7 @@ namespace RingKnifeDetector.Views
                 {
                     var ring = sample?.Rings.ElementAtOrDefault(ri);
                     var ringResult = result?.Rings.ElementAtOrDefault(ri);
+                    var moistureWarning = MoistureValidation.HasExcessiveBoxMoistureSpread(ringResult);
                     bool isFirstRing = ri == 0;
                     bool ringPairNext = ri > 0;
 
@@ -222,7 +230,7 @@ namespace RingKnifeDetector.Views
                         var box1Dry = MakeBoxDecimal(box1, b => b.DrySampleMass, (b, v) => b.DrySampleMass = v);
                         RegisterTab(box1Dry, 14, row);
                         AddCell(row, 14, box1Dry, false, ringPairNext);
-                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(0))), true, ringPairNext);
+                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(0)), moistureWarning), true, ringPairNext);
                         AddCell(row, 16, row, 16, 2, MakeReadOnlyText(FormatMoisture(ringResult?.AvgMoisture)), true, ringPairNext);
                     }
 
@@ -276,7 +284,7 @@ namespace RingKnifeDetector.Views
                         var box2Dry = MakeBoxDecimal(box2, b => b.DrySampleMass, (b, v) => b.DrySampleMass = v);
                         RegisterTab(box2Dry, 14, row);
                         AddCell(row, 14, box2Dry, false);
-                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(1))), true);
+                        AddCell(row, 15, MakeReadOnlyText(FormatMoisture(ringResult?.MoistureRates.ElementAtOrDefault(1)), moistureWarning), true);
                     }
                     row++;
                 }
@@ -440,7 +448,7 @@ namespace RingKnifeDetector.Views
             };
         }
 
-        private TextBox MakeReadOnlyText(string text)
+        private TextBox MakeReadOnlyText(string text, bool warn = false)
         {
             var tb = new TextBox
             {
@@ -457,6 +465,8 @@ namespace RingKnifeDetector.Views
                 IsTabStop = false,
                 Focusable = false
             };
+            if (warn)
+                tb.Foreground = MoistureWarningBrush;
             return tb;
         }
 

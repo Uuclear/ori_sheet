@@ -25,7 +25,7 @@ dotnet run --project RingKnifeDetector/RingKnifeDetector.csproj
 .\build.ps1
 ```
 
-产物路径：`dist/RingKnifeDetector-v1.3.0-win-x64/`
+产物路径：`dist/RingKnifeDetector-v1.3.1-win-x64/`
 
 ## 使用流程
 
@@ -98,7 +98,7 @@ cd RingKnifeDetector
 dotnet test
 ```
 
-当前约 39 项单元测试，覆盖计算、备注解析、LIMIS HTML 解析、Word 备注格式、导出提醒等。
+当前约 69 项单元测试，覆盖计算、备注解析、LIMIS HTML 解析、Word 备注格式、导出提醒等。
 
 ## 文档
 
@@ -111,4 +111,4 @@ dotnet test
 
 ## 版本
 
-当前版本：**v1.3.0** — 详见 [CHANGELOG.md](CHANGELOG.md)
+当前版本：**v1.3.1** — 详见 [CHANGELOG.md](CHANGELOG.md)

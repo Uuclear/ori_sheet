@@ -2,7 +2,7 @@
 # 用法: .\build.ps1
 
 $ErrorActionPreference = "Stop"
-$Version = "1.3.0"
+$Version = "1.3.1"
 $OutDir = Join-Path $PSScriptRoot "dist\RingKnifeDetector-v$Version-win-x64"
 $ZipPath = Join-Path $PSScriptRoot "dist\RingKnifeDetector-v$Version-win-x64.zip"
 $Project = Join-Path $PSScriptRoot "RingKnifeDetector\RingKnifeDetector\RingKnifeDetector.csproj"

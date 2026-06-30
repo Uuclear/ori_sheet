@@ -22,7 +22,7 @@ public class RemarkParserTests
         RemarkParser.FillMissing(project, parameters, samples, "压实度≥90%");
 
         Assert.Equal(ReportDefaults.MissingFieldPlaceholder, parameters.CompactionMethod);
-        Assert.Equal(ReportDefaults.MissingFieldPlaceholder, parameters.JudgeBasis);
+        Assert.Equal(ReportDefaults.DefaultJudgeBasis, parameters.JudgeBasis);
     }
 
     [Fact]
@@ -392,5 +392,37 @@ public class RemarkParserTests
         Assert.Equal("土基层", parameters.TestLocation);
         Assert.Equal("300", samples[0].Thickness);
         Assert.Equal("250", samples[0].Elevation);
+    }
+
+    [Fact]
+    public void FillMissing_ExtractsTestLocationWithoutFollowingMaterialLabel()
+    {
+        const string remark =
+            "取样标高：2680mm 厚度：300mm 最大干密度1.77g/cm³ 最佳含水率14.6% 设计要求压实度≥92％ 取样时间2026-6-7 取样部位D25~D22护岸结构回填 材料种类：粘土";
+
+        var project = new ProjectInfo();
+        var parameters = new RecordParams();
+        var samples = new List<RingKnifeSample> { new() };
+
+        var result = RemarkParser.FillMissing(project, parameters, samples, remark);
+
+        Assert.Equal("D25~D22护岸结构回填", parameters.TestLocation);
+        Assert.Equal("粘土", parameters.MaterialType);
+        Assert.Equal("2026年06月07日", samples[0].SamplingDate);
+        Assert.Equal("300", samples[0].Thickness);
+        Assert.Equal("2680", samples[0].Elevation);
+        Assert.Contains("sample.samplingDate", result.ExtractedFieldKeys);
+    }
+
+    [Fact]
+    public void FillMissing_DoesNotTreatSamplingPointInsideSamplingLocationAsLocation()
+    {
+        const string remark = "取样部位D25~D22护岸结构回填 材料种类：粘土";
+
+        var parameters = new RecordParams();
+        RemarkParser.FillMissing(new ProjectInfo(), parameters, new List<RingKnifeSample> { new() }, remark);
+
+        Assert.Equal("D25~D22护岸结构回填", parameters.TestLocation);
+        Assert.Equal("粘土", parameters.MaterialType);
     }
 }

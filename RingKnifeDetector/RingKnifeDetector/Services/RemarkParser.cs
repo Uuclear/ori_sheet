@@ -16,8 +16,10 @@ namespace RingKnifeDetector.Services
         private const string DryDensityUnit = @"g\s*/\s*cm\s*[³3³]?";
         private const string UnitFieldBoundary = @"(?=\s*[;；]?\s*(?:监理单位|见证单位|建设单位|设计单位|施工单位)|\n|$)";
         private const string ChineseMaterialRun = @"[\p{IsCJKUnifiedIdeographs}（）()]+";
+        private const string FollowingFieldLabels =
+            "材料种类|材料种美|品种|取样时间|取样标高|厚度|最大干密度|毛体积密度|最佳含水率|最优含水率|设计要求|夯实方式|监理单位|见证单位|施工单位|委托组数|检测组数";
         private const string LocationFieldBoundary =
-            @"(?=\n|标高|高程|取[样祥]层厚度|填筑厚度|取样点厚度|取样时间|取样标高|委托组数|检测组数|最大干密度|最佳|最优|设计|$)";
+            $@"(?=\s*(?:{FollowingFieldLabels})(?:\s*[:：]|\s|$)|\n|标高|高程|取[样祥]层厚度|填筑厚度|取样点厚度|委托组数|检测组数|最佳|最优|设计|$)";
         private const string GluedAfterDigitLabels =
             "最佳含水率|最优含水率|最佳含水量|最优含水量|材料种类|材料种美|品种|设计要求|取样部位|取样层厚度|取祥层厚度|填筑厚度|取样时间|取样标高|最大干密度|毛体积密度|压实度|压实系数|委托组数|检测组数|固体体积率";
         private const string GluedAfterCjkLabels =
@@ -70,8 +72,8 @@ namespace RingKnifeDetector.Services
             {
                 var v = MatchField(ctx, $@"取样部位{LabelSep}(.+?){LocationFieldBoundary}", "params.testLocation", "取样部位")
                         ?? MatchField(ctx, $@"检测点桩号{LabelSep}(.+?)(?=\n|最佳|最大|设计|最优|$)", "params.testLocation", "检测点桩号")
-                        ?? MatchField(ctx, $@"取样点{LabelSep}(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
-                        ?? MatchField(ctx, $@"取样点\s+(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
+                        ?? MatchField(ctx, $@"取样点(?!部){LabelSep}(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
+                        ?? MatchField(ctx, $@"取样点(?!部)\s+(.+?){LocationFieldBoundary}", "params.testLocation", "取样点")
                         ?? MatchField(ctx, $@"点桩号{LabelSep}(.+?)(?=\n|设计要求|最佳|最大|$)", "params.testLocation", "点桩号");
                 if (!string.IsNullOrEmpty(v)) parameters.TestLocation = v;
             }
@@ -120,6 +122,8 @@ namespace RingKnifeDetector.Services
                         ctx.RecordFromGroupToMatchEnd(m, 1, "sample.thickness", "厚度");
                     }
                 }
+
+                TryExtractSamplingDate(text, ctx, samples);
             }
 
             TextSanitizer.SanitizeProject(project);
@@ -138,10 +142,28 @@ namespace RingKnifeDetector.Services
 
             if (!result.ExtractedFieldKeys.Contains("params.judgeBasis")
                 && (string.IsNullOrWhiteSpace(parameters.JudgeBasis)
-                    || parameters.JudgeBasis == "JTG 3450-2019"))
+                    || parameters.JudgeBasis == "JTG 3450-2019"
+                    || parameters.JudgeBasis == ReportDefaults.MissingFieldPlaceholder))
             {
-                parameters.JudgeBasis = ReportDefaults.MissingFieldPlaceholder;
+                parameters.JudgeBasis = ReportDefaults.DefaultJudgeBasis;
             }
+        }
+
+        private static void TryExtractSamplingDate(string text, ParseContext ctx, IList<RingKnifeSample> samples)
+        {
+            var m = Regex.Match(
+                text,
+                @"取样时间\s*[:：]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)",
+                RegexOptions.IgnoreCase);
+            if (!m.Success) return;
+
+            var normalized = DateHelper.Normalize(m.Groups[1].Value);
+            if (string.IsNullOrEmpty(normalized)) return;
+
+            foreach (var sample in samples)
+                sample.SamplingDate = normalized;
+
+            ctx.RecordFromGroupToMatchEnd(m, 1, "sample.samplingDate", "取样时间");
         }
 
         public static RemarkParseResult AnalyzeHighlights(string? remark)
@@ -484,12 +506,32 @@ namespace RingKnifeDetector.Services
         {
             var m = Regex.Match(ctx.Text, pattern, RegexOptions.Singleline | RegexOptions.IgnoreCase);
             if (!m.Success) return null;
-            var value = m.Groups[1].Value.Trim();
+            var value = TrimAtFollowingFieldLabels(m.Groups[1].Value.Trim());
             if (string.IsNullOrEmpty(value) || IsMissingValue(value)) return null;
             value = NormalizeMaterialText(value);
             if (string.IsNullOrEmpty(value)) return null;
             ctx.RecordGroup(m.Groups[1], fieldKey, label);
             return value;
+        }
+
+        private static string TrimAtFollowingFieldLabels(string value)
+        {
+            var labels = new[]
+            {
+                "材料种类", "材料种美", "品种", "取样时间", "取样标高", "取样层厚度", "取祥层厚度",
+                "填筑厚度", "厚度", "最大干密度", "毛体积密度", "最佳含水率", "最优含水率", "设计要求",
+                "夯实方式", "监理单位", "见证单位", "施工单位", "委托组数", "检测组数"
+            };
+
+            var index = value.Length;
+            foreach (var label in labels)
+            {
+                var pos = value.IndexOf(label, StringComparison.Ordinal);
+                if (pos > 0)
+                    index = Math.Min(index, pos);
+            }
+
+            return index < value.Length ? value[..index].Trim() : value.Trim();
         }
 
         private static string NormalizeRemarkText(string remark)
